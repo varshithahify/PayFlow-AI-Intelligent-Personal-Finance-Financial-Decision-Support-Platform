@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
@@ -47,7 +46,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/auth/register",
                                 "/auth/login",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/error"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
@@ -74,10 +74,10 @@ public class SecurityConfig {
             }
 
             return org.springframework.security.core.userdetails.User
-        .withUsername(user.getEmail())
-        .password(user.getPasswordHash())
-        .authorities(new String[0])
-        .build();
+                    .withUsername(user.getEmail())
+                    .password(user.getPasswordHash())
+                    .authorities(new String[0])
+                    .build();
         };
     }
 }
