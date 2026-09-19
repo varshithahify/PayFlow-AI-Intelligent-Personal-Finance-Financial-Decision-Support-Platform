@@ -55,6 +55,42 @@ public class TransactionController {
         );
     }
 
+    @PostMapping("/{id}/process")
+    public ResponseEntity<TransactionResponse> startProcessing(
+            @PathVariable Long id,
+            Authentication authentication
+    ) {
+        String email = authentication.getName();
+
+        return ResponseEntity.ok(
+                transactionService.startProcessing(id, email)
+        );
+    }
+
+    @PostMapping("/{id}/success")
+    public ResponseEntity<TransactionResponse> markSuccess(
+            @PathVariable Long id,
+            Authentication authentication
+    ) {
+        String email = authentication.getName();
+
+        return ResponseEntity.ok(
+                transactionService.markSuccess(id, email)
+        );
+    }
+
+    @PostMapping("/{id}/fail")
+    public ResponseEntity<TransactionResponse> markFailed(
+            @PathVariable Long id,
+            Authentication authentication
+    ) {
+        String email = authentication.getName();
+
+        return ResponseEntity.ok(
+                transactionService.markFailed(id, email)
+        );
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransaction(
             @PathVariable Long id,
