@@ -5,6 +5,9 @@ import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
+import com.payflow.payflow_backend.gateway.GatewayResult;
+import com.payflow.payflow_backend.gateway.GatewayRouter;
+import com.payflow.payflow_backend.gateway.PaymentGateway;
 import com.payflow.payflow_backend.repository.TransactionRepository;
 import com.payflow.payflow_backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -17,13 +20,16 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
+    private final GatewayRouter gatewayRouter;
 
     public TransactionService(
             TransactionRepository transactionRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            GatewayRouter gatewayRouter
     ) {
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
+        this.gatewayRouter = gatewayRouter;
     }
 
     public TransactionResponse createTransaction(
@@ -50,8 +56,9 @@ public class TransactionService {
         return new TransactionResponse(savedTransaction);
     }
 
-    public List<TransactionResponse> getUserTransactions(String email) {
-
+    public List<TransactionResponse> getUserTransactions(
+            String email
+    ) {
         User user = userRepository.findByEmail(email);
 
         if (user == null) {
@@ -69,7 +76,8 @@ public class TransactionService {
             Long id,
             String email
     ) {
-        Transaction transaction = getUserTransaction(id, email);
+        Transaction transaction =
+                getOwnedTransaction(id, email);
 
         return new TransactionResponse(transaction);
     }
@@ -79,7 +87,8 @@ public class TransactionService {
             Long id,
             String email
     ) {
-        Transaction transaction = getUserTransaction(id, email);
+        Transaction transaction =
+                getOwnedTransaction(id, email);
 
         if (transaction.getStatus() != TransactionStatus.CREATED) {
             throw new IllegalStateException(
@@ -87,12 +96,42 @@ public class TransactionService {
             );
         }
 
+        /*
+         * Select a payment gateway based on the
+         * transaction's payment method.
+         */
+        PaymentGateway gateway =
+                gatewayRouter.route(transaction);
+
+        /*
+         * Move transaction into PROCESSING state
+         * before sending it to the gateway.
+         */
         transaction.setStatus(TransactionStatus.PROCESSING);
 
-        Transaction savedTransaction =
+        transactionRepository.save(transaction);
+
+        /*
+         * Simulate payment processing through
+         * the selected gateway.
+         */
+        GatewayResult result =
+                gateway.processPayment(transaction);
+
+        /*
+         * Update final transaction state based
+         * on the gateway result.
+         */
+        if (result.isSuccess()) {
+            transaction.setStatus(TransactionStatus.SUCCESS);
+        } else {
+            transaction.setStatus(TransactionStatus.FAILED);
+        }
+
+        Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
-        return new TransactionResponse(savedTransaction);
+        return new TransactionResponse(updatedTransaction);
     }
 
     @Transactional
@@ -100,7 +139,8 @@ public class TransactionService {
             Long id,
             String email
     ) {
-        Transaction transaction = getUserTransaction(id, email);
+        Transaction transaction =
+                getOwnedTransaction(id, email);
 
         if (transaction.getStatus() != TransactionStatus.PROCESSING) {
             throw new IllegalStateException(
@@ -110,10 +150,9 @@ public class TransactionService {
 
         transaction.setStatus(TransactionStatus.SUCCESS);
 
-        Transaction savedTransaction =
-                transactionRepository.save(transaction);
-
-        return new TransactionResponse(savedTransaction);
+        return new TransactionResponse(
+                transactionRepository.save(transaction)
+        );
     }
 
     @Transactional
@@ -121,7 +160,8 @@ public class TransactionService {
             Long id,
             String email
     ) {
-        Transaction transaction = getUserTransaction(id, email);
+        Transaction transaction =
+                getOwnedTransaction(id, email);
 
         if (transaction.getStatus() != TransactionStatus.PROCESSING) {
             throw new IllegalStateException(
@@ -131,22 +171,22 @@ public class TransactionService {
 
         transaction.setStatus(TransactionStatus.FAILED);
 
-        Transaction savedTransaction =
-                transactionRepository.save(transaction);
-
-        return new TransactionResponse(savedTransaction);
+        return new TransactionResponse(
+                transactionRepository.save(transaction)
+        );
     }
 
     public void deleteTransaction(
             Long id,
             String email
     ) {
-        Transaction transaction = getUserTransaction(id, email);
+        Transaction transaction =
+                getOwnedTransaction(id, email);
 
         transactionRepository.delete(transaction);
     }
 
-    private Transaction getUserTransaction(
+    private Transaction getOwnedTransaction(
             Long id,
             String email
     ) {
@@ -156,11 +196,14 @@ public class TransactionService {
             throw new RuntimeException("User not found");
         }
 
-        Transaction transaction = transactionRepository
-                .findById(id)
-                .orElseThrow(() ->
-                        new RuntimeException("Transaction not found")
-                );
+        Transaction transaction =
+                transactionRepository
+                        .findById(id)
+                        .orElseThrow(() ->
+                                new RuntimeException(
+                                        "Transaction not found"
+                                )
+                        );
 
         if (!transaction.getUserId().equals(user.getId())) {
             throw new RuntimeException(
