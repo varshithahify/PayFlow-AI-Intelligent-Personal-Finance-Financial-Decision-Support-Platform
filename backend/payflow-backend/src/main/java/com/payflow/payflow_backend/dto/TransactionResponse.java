@@ -21,7 +21,7 @@ public class TransactionResponse {
         this.amount = transaction.getAmount();
         this.currency = transaction.getCurrency();
         this.paymentMethod = transaction.getPaymentMethod();
-        this.status = transaction.getStatus();
+        this.status = transaction.getStatus().name();
         this.userId = transaction.getUserId();
         this.createdAt = transaction.getCreatedAt();
         this.updatedAt = transaction.getUpdatedAt();
