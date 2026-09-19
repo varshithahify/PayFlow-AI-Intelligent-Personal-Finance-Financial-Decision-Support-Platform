@@ -21,8 +21,9 @@ public class Transaction {
     @Column(nullable = false, length = 30)
     private String paymentMethod;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String status;
+    private TransactionStatus status;
 
     @Column(name = "user_id", nullable = false)
     private Long userId;
@@ -40,7 +41,7 @@ public class Transaction {
             BigDecimal amount,
             String currency,
             String paymentMethod,
-            String status,
+            TransactionStatus status,
             Long userId
     ) {
         this.amount = amount;
@@ -98,11 +99,11 @@ public class Transaction {
         this.paymentMethod = paymentMethod;
     }
 
-    public String getStatus() {
+    public TransactionStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(TransactionStatus status) {
         this.status = status;
     }
 
