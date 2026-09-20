@@ -21,7 +21,6 @@ public class GatewayB implements PaymentGateway {
 
         return GatewayResult.success(
                 getName(),
-                "Payment processed successfully by Gateway B"
-        );
+                "Payment processed successfully by Gateway B");
     }
 }
