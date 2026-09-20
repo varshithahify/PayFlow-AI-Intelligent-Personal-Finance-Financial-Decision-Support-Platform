@@ -23,4 +23,8 @@ public interface InvestigationRepository
     Optional<Investigation>
     findTopByTransactionIdOrderByCreatedAtDesc(
             Long transactionId);
+
+    Optional<Investigation>
+    findTopByReconciliationRecordIdOrderByCreatedAtDesc(
+            Long reconciliationRecordId);
 }
