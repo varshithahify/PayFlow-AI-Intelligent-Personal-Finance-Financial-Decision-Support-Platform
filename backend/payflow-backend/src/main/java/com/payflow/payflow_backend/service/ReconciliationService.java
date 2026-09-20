@@ -1,16 +1,22 @@
 package com.payflow.payflow_backend.service;
 
 import com.payflow.payflow_backend.entity.ExternalPaymentRecord;
+import com.payflow.payflow_backend.entity.Investigation;
+import com.payflow.payflow_backend.entity.InvestigationIssueType;
+import com.payflow.payflow_backend.entity.InvestigationPriority;
 import com.payflow.payflow_backend.entity.ReconciliationRecord;
 import com.payflow.payflow_backend.entity.ReconciliationStatus;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.repository.ExternalPaymentRecordRepository;
+import com.payflow.payflow_backend.repository.InvestigationRepository;
 import com.payflow.payflow_backend.repository.ReconciliationRecordRepository;
 import com.payflow.payflow_backend.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 public class ReconciliationService {
@@ -18,42 +24,56 @@ public class ReconciliationService {
     private final TransactionRepository transactionRepository;
     private final ExternalPaymentRecordRepository externalPaymentRecordRepository;
     private final ReconciliationRecordRepository reconciliationRecordRepository;
+    private final InvestigationRepository investigationRepository;
+    private final InvestigationService investigationService;
 
     public ReconciliationService(
             TransactionRepository transactionRepository,
             ExternalPaymentRecordRepository externalPaymentRecordRepository,
-            ReconciliationRecordRepository reconciliationRecordRepository) {
+            ReconciliationRecordRepository reconciliationRecordRepository,
+            InvestigationRepository investigationRepository,
+            InvestigationService investigationService) {
 
-        this.transactionRepository = transactionRepository;
+        this.transactionRepository =
+                transactionRepository;
+
         this.externalPaymentRecordRepository =
                 externalPaymentRecordRepository;
+
         this.reconciliationRecordRepository =
                 reconciliationRecordRepository;
+
+        this.investigationRepository =
+                investigationRepository;
+
+        this.investigationService =
+                investigationService;
     }
 
     @Transactional
-    public ReconciliationRecord reconcileTransaction(Long transactionId) {
+    public ReconciliationRecord reconcileTransaction(
+            Long transactionId) {
 
-        Transaction transaction = transactionRepository
-                .findById(transactionId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Transaction not found: " + transactionId));
+        Transaction transaction =
+                transactionRepository
+                        .findById(transactionId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Transaction not found: "
+                                                + transactionId));
 
         ExternalPaymentRecord externalRecord =
                 externalPaymentRecordRepository
                         .findByInternalTransactionId(transactionId)
                         .orElse(null);
 
-        /*
-         * No external record found.
-         */
         if (externalRecord == null) {
 
             ReconciliationRecord record =
                     new ReconciliationRecord();
 
-            record.setTransactionId(transaction.getId());
+            record.setTransactionId(
+                    transaction.getId());
 
             record.setStatus(
                     ReconciliationStatus.MISSING_EXTERNAL);
@@ -70,12 +90,16 @@ public class ReconciliationService {
             record.setReconciledAt(
                     LocalDateTime.now());
 
-            return reconciliationRecordRepository.save(record);
+            ReconciliationRecord savedRecord =
+                    reconciliationRecordRepository.save(record);
+
+            createInvestigationIfNeeded(
+                    savedRecord,
+                    InvestigationIssueType.MISSING_EXTERNAL);
+
+            return savedRecord;
         }
 
-        /*
-         * Compare internal and external records.
-         */
         boolean amountMatches =
                 transaction.getAmount()
                         .compareTo(
@@ -95,22 +119,17 @@ public class ReconciliationService {
         ReconciliationStatus status;
         String mismatchReason = null;
 
-        /*
-         * Everything matches.
-         */
         if (amountMatches
                 && currencyMatches
                 && statusMatches) {
 
-            status = ReconciliationStatus.MATCHED;
-        }
+            status =
+                    ReconciliationStatus.MATCHED;
 
-        /*
-         * At least one field does not match.
-         */
-        else {
+        } else {
 
-            status = ReconciliationStatus.MISMATCH;
+            status =
+                    ReconciliationStatus.MISMATCH;
 
             StringBuilder reason =
                     new StringBuilder();
@@ -134,9 +153,6 @@ public class ReconciliationService {
                     reason.toString().trim();
         }
 
-        /*
-         * Create reconciliation record.
-         */
         ReconciliationRecord record =
                 new ReconciliationRecord();
 
@@ -166,7 +182,23 @@ public class ReconciliationService {
         record.setReconciledAt(
                 LocalDateTime.now());
 
-        return reconciliationRecordRepository.save(record);
+        ReconciliationRecord savedRecord =
+                reconciliationRecordRepository.save(record);
+
+        if (status == ReconciliationStatus.MISMATCH) {
+
+            InvestigationIssueType issueType =
+                    determineMismatchIssueType(
+                            amountMatches,
+                            currencyMatches,
+                            statusMatches);
+
+            createInvestigationIfNeeded(
+                    savedRecord,
+                    issueType);
+        }
+
+        return savedRecord;
     }
 
     @Transactional
@@ -183,19 +215,17 @@ public class ReconciliationService {
 
         Transaction transaction = null;
 
-        if (externalRecord.getInternalTransactionId() != null) {
+        if (externalRecord.getInternalTransactionId()
+                != null) {
 
-            transaction = transactionRepository
-                    .findById(
-                            externalRecord.getInternalTransactionId())
-                    .orElse(null);
+            transaction =
+                    transactionRepository
+                            .findById(
+                                    externalRecord
+                                            .getInternalTransactionId())
+                            .orElse(null);
         }
 
-        /*
-         * External payment exists,
-         * but the corresponding internal transaction
-         * does not exist.
-         */
         if (transaction == null) {
 
             ReconciliationRecord record =
@@ -221,28 +251,91 @@ public class ReconciliationService {
             record.setReconciledAt(
                     LocalDateTime.now());
 
-            return reconciliationRecordRepository.save(record);
+            ReconciliationRecord savedRecord =
+                    reconciliationRecordRepository.save(record);
+
+            createInvestigationIfNeeded(
+                    savedRecord,
+                    InvestigationIssueType.MISSING_INTERNAL);
+
+            return savedRecord;
         }
 
-        /*
-         * Internal transaction exists.
-         * Reuse the normal reconciliation logic.
-         */
         return reconcileTransaction(
                 transaction.getId());
     }
-    public java.util.Optional<ReconciliationRecord>
-getLatestReconciliation(Long transactionId) {
 
-    return reconciliationRecordRepository
-            .findTopByTransactionIdOrderByReconciledAtDesc(
-                    transactionId);
-}
+    private void createInvestigationIfNeeded(
+            ReconciliationRecord reconciliationRecord,
+            InvestigationIssueType issueType) {
 
-public java.util.List<ReconciliationRecord>
-getByStatus(ReconciliationStatus status) {
+        Optional<Investigation> existingInvestigation =
+                investigationRepository
+                        .findTopByTransactionIdOrderByCreatedAtDesc(
+                                reconciliationRecord
+                                        .getTransactionId());
 
-    return reconciliationRecordRepository
-            .findByStatusOrderByReconciledAtDesc(status);
-}
+        if (existingInvestigation.isPresent()) {
+
+            Investigation existing =
+                    existingInvestigation.get();
+
+            if (existing.getIssueType() == issueType
+                    && existing.getStatus()
+                    != com.payflow.payflow_backend.entity.InvestigationStatus.RESOLVED) {
+
+                return;
+            }
+        }
+
+        String summary =
+                reconciliationRecord.getMismatchReason();
+
+        if (summary == null
+                || summary.isBlank()) {
+
+            summary =
+                    "Reconciliation issue detected: "
+                            + issueType;
+        }
+
+        investigationService.createInvestigation(
+                reconciliationRecord.getTransactionId(),
+                reconciliationRecord.getId(),
+                InvestigationPriority.HIGH,
+                issueType,
+                summary);
+    }
+
+    private InvestigationIssueType determineMismatchIssueType(
+            boolean amountMatches,
+            boolean currencyMatches,
+            boolean statusMatches) {
+
+        if (!amountMatches) {
+            return InvestigationIssueType.AMOUNT_MISMATCH;
+        }
+
+        if (!currencyMatches) {
+            return InvestigationIssueType.CURRENCY_MISMATCH;
+        }
+
+        return InvestigationIssueType.STATUS_MISMATCH;
+    }
+
+    public Optional<ReconciliationRecord>
+    getLatestReconciliation(Long transactionId) {
+
+        return reconciliationRecordRepository
+                .findTopByTransactionIdOrderByReconciledAtDesc(
+                        transactionId);
+    }
+
+    public List<ReconciliationRecord>
+    getByStatus(ReconciliationStatus status) {
+
+        return reconciliationRecordRepository
+                .findByStatusOrderByReconciledAtDesc(
+                        status);
+    }
 }
