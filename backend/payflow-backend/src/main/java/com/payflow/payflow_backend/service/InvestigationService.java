@@ -1,6 +1,7 @@
 package com.payflow.payflow_backend.service;
 
 import com.payflow.payflow_backend.entity.Investigation;
+import com.payflow.payflow_backend.entity.InvestigationIssueType;
 import com.payflow.payflow_backend.entity.InvestigationPriority;
 import com.payflow.payflow_backend.entity.InvestigationStatus;
 import com.payflow.payflow_backend.repository.InvestigationRepository;
@@ -18,8 +19,7 @@ public class InvestigationService {
     public InvestigationService(
             InvestigationRepository investigationRepository) {
 
-        this.investigationRepository =
-                investigationRepository;
+        this.investigationRepository = investigationRepository;
     }
 
     @Transactional
@@ -27,11 +27,10 @@ public class InvestigationService {
             Long transactionId,
             Long reconciliationRecordId,
             InvestigationPriority priority,
-            com.payflow.payflow_backend.entity.InvestigationIssueType issueType,
+            InvestigationIssueType issueType,
             String summary) {
 
-        Investigation investigation =
-                new Investigation();
+        Investigation investigation = new Investigation();
 
         investigation.setTransactionId(transactionId);
         investigation.setReconciliationRecordId(
@@ -42,14 +41,12 @@ public class InvestigationService {
         investigation.setIssueType(issueType);
         investigation.setSummary(summary);
 
-        LocalDateTime now =
-                LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
         investigation.setCreatedAt(now);
         investigation.setUpdatedAt(now);
 
-        return investigationRepository.save(
-                investigation);
+        return investigationRepository.save(investigation);
     }
 
     @Transactional(readOnly = true)
@@ -100,16 +97,13 @@ public class InvestigationService {
                 newStatus);
 
         investigation.setStatus(newStatus);
-        investigation.setUpdatedAt(
-                LocalDateTime.now());
+        investigation.setUpdatedAt(LocalDateTime.now());
 
         if (newStatus == InvestigationStatus.RESOLVED) {
-            investigation.setResolvedAt(
-                    LocalDateTime.now());
+            investigation.setResolvedAt(LocalDateTime.now());
         }
 
-        return investigationRepository.save(
-                investigation);
+        return investigationRepository.save(investigation);
     }
 
     private void validateStatusTransition(
@@ -126,22 +120,16 @@ public class InvestigationService {
                 switch (currentStatus) {
 
                     case OPEN ->
-                            newStatus ==
-                                    InvestigationStatus.INVESTIGATING
-                                    || newStatus ==
-                                    InvestigationStatus.ESCALATED;
+                            newStatus == InvestigationStatus.INVESTIGATING
+                                    || newStatus == InvestigationStatus.ESCALATED;
 
                     case INVESTIGATING ->
-                            newStatus ==
-                                    InvestigationStatus.RESOLVED
-                                    || newStatus ==
-                                    InvestigationStatus.ESCALATED;
+                            newStatus == InvestigationStatus.RESOLVED
+                                    || newStatus == InvestigationStatus.ESCALATED;
 
                     case ESCALATED ->
-                            newStatus ==
-                                    InvestigationStatus.INVESTIGATING
-                                    || newStatus ==
-                                    InvestigationStatus.RESOLVED;
+                            newStatus == InvestigationStatus.INVESTIGATING
+                                    || newStatus == InvestigationStatus.RESOLVED;
 
                     case RESOLVED ->
                             false;
