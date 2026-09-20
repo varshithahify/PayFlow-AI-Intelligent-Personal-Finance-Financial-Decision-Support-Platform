@@ -19,23 +19,19 @@ public class InvestigationController {
     public InvestigationController(
             InvestigationService investigationService) {
 
-        this.investigationService = investigationService;
+        this.investigationService =
+                investigationService;
     }
 
     @PostMapping
     public ResponseEntity<Investigation> createInvestigation(
-            @RequestParam(required = false)
-            Long transactionId,
-
+            @RequestParam Long transactionId,
             @RequestParam(required = false)
             Long reconciliationRecordId,
-
             @RequestParam
             InvestigationPriority priority,
-
             @RequestParam
             InvestigationIssueType issueType,
-
             @RequestParam
             String summary) {
 
