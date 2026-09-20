@@ -16,89 +16,85 @@ public class TransactionController {
 
     private final TransactionService transactionService;
 
-    public TransactionController(TransactionService transactionService) {
+    public TransactionController(
+            TransactionService transactionService) {
         this.transactionService = transactionService;
     }
 
     @PostMapping
     public ResponseEntity<TransactionResponse> createTransaction(
             @Valid @RequestBody TransactionRequest request,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.createTransaction(request, email)
-        );
+                transactionService.createTransaction(
+                        request,
+                        authentication.getName(),
+                        idempotencyKey));
     }
 
     @GetMapping
     public ResponseEntity<List<TransactionResponse>> getTransactions(
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.getUserTransactions(email)
-        );
+                transactionService.getUserTransactions(
+                        authentication.getName()));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<TransactionResponse> getTransaction(
             @PathVariable Long id,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.getTransaction(id, email)
-        );
+                transactionService.getTransaction(
+                        id,
+                        authentication.getName()));
     }
 
     @PostMapping("/{id}/process")
     public ResponseEntity<TransactionResponse> startProcessing(
             @PathVariable Long id,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.startProcessing(id, email)
-        );
+                transactionService.startProcessing(
+                        id,
+                        authentication.getName()));
     }
 
     @PostMapping("/{id}/success")
     public ResponseEntity<TransactionResponse> markSuccess(
             @PathVariable Long id,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.markSuccess(id, email)
-        );
+                transactionService.markSuccess(
+                        id,
+                        authentication.getName()));
     }
 
     @PostMapping("/{id}/fail")
     public ResponseEntity<TransactionResponse> markFailed(
             @PathVariable Long id,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
         return ResponseEntity.ok(
-                transactionService.markFailed(id, email)
-        );
+                transactionService.markFailed(
+                        id,
+                        authentication.getName()));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransaction(
             @PathVariable Long id,
-            Authentication authentication
-    ) {
-        String email = authentication.getName();
+            Authentication authentication) {
 
-        transactionService.deleteTransaction(id, email);
+        transactionService.deleteTransaction(
+                id,
+                authentication.getName());
 
         return ResponseEntity.noContent().build();
     }
