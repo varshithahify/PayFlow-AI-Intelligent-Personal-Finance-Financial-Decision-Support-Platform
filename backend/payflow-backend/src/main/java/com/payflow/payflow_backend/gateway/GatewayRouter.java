@@ -19,15 +19,30 @@ public class GatewayRouter {
         return gateways.stream()
                 .filter(gateway ->
                         gateway.supports(
-                                transaction.getPaymentMethod()
-                        )
-                )
+                                transaction.getPaymentMethod()))
                 .findFirst()
                 .orElseThrow(() ->
                         new IllegalArgumentException(
                                 "No payment gateway supports payment method: "
-                                        + transaction.getPaymentMethod()
-                        )
-                );
+                                        + transaction.getPaymentMethod()));
+    }
+
+    public List<PaymentGateway> routeAll(
+            Transaction transaction) {
+
+        List<PaymentGateway> supportedGateways =
+                gateways.stream()
+                        .filter(gateway ->
+                                gateway.supports(
+                                        transaction.getPaymentMethod()))
+                        .toList();
+
+        if (supportedGateways.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No payment gateway supports payment method: "
+                            + transaction.getPaymentMethod());
+        }
+
+        return supportedGateways;
     }
 }
