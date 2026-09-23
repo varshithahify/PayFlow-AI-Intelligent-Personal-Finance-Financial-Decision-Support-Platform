@@ -5,6 +5,9 @@ import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
+import com.payflow.payflow_backend.event.TransactionEvent;
+import com.payflow.payflow_backend.event.TransactionEventProducer;
+import com.payflow.payflow_backend.event.TransactionEventType;
 import com.payflow.payflow_backend.exception.ResourceNotFoundException;
 import com.payflow.payflow_backend.gateway.GatewayResult;
 import com.payflow.payflow_backend.gateway.GatewayRouter;
@@ -14,6 +17,7 @@ import com.payflow.payflow_backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -22,15 +26,19 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final GatewayRouter gatewayRouter;
+    private final TransactionEventProducer transactionEventProducer;
 
     public TransactionService(
             TransactionRepository transactionRepository,
             UserRepository userRepository,
-            GatewayRouter gatewayRouter) {
+            GatewayRouter gatewayRouter,
+            TransactionEventProducer transactionEventProducer) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
         this.gatewayRouter = gatewayRouter;
+        this.transactionEventProducer =
+                transactionEventProducer;
     }
 
     @Transactional
@@ -93,6 +101,16 @@ public class TransactionService {
 
         Transaction savedTransaction =
                 transactionRepository.save(transaction);
+
+        /*
+         * Publish transaction-created event.
+         *
+         * Kafka is used to notify downstream services that
+         * a new transaction has been created.
+         */
+        publishTransactionEvent(
+                savedTransaction,
+                TransactionEventType.CREATED);
 
         return new TransactionResponse(savedTransaction);
     }
@@ -159,6 +177,13 @@ public class TransactionService {
 
         transactionRepository.save(transaction);
 
+        /*
+         * Publish PROCESSING event.
+         */
+        publishTransactionEvent(
+                transaction,
+                TransactionEventType.PROCESSING);
+
         GatewayResult successfulResult = null;
 
         /*
@@ -197,6 +222,23 @@ public class TransactionService {
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
+        /*
+         * Publish the final transaction event.
+         */
+        if (updatedTransaction.getStatus()
+                == TransactionStatus.SUCCESS) {
+
+            publishTransactionEvent(
+                    updatedTransaction,
+                    TransactionEventType.SUCCESS);
+
+        } else {
+
+            publishTransactionEvent(
+                    updatedTransaction,
+                    TransactionEventType.FAILED);
+        }
+
         return new TransactionResponse(updatedTransaction);
     }
 
@@ -217,6 +259,13 @@ public class TransactionService {
 
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
+
+        /*
+         * Publish SUCCESS event.
+         */
+        publishTransactionEvent(
+                updatedTransaction,
+                TransactionEventType.SUCCESS);
 
         return new TransactionResponse(updatedTransaction);
     }
@@ -239,6 +288,13 @@ public class TransactionService {
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
+        /*
+         * Publish FAILED event.
+         */
+        publishTransactionEvent(
+                updatedTransaction,
+                TransactionEventType.FAILED);
+
         return new TransactionResponse(updatedTransaction);
     }
 
@@ -251,6 +307,29 @@ public class TransactionService {
                 getOwnedTransaction(id, email);
 
         transactionRepository.delete(transaction);
+    }
+
+    /*
+     * Creates and publishes a Kafka event for the
+     * current transaction state.
+     */
+    private void publishTransactionEvent(
+            Transaction transaction,
+            TransactionEventType eventType) {
+
+        TransactionEvent event =
+                new TransactionEvent(
+                        transaction.getId(),
+                        transaction.getUserId(),
+                        transaction.getAmount(),
+                        transaction.getCurrency(),
+                        transaction.getPaymentMethod(),
+                        transaction.getStatus(),
+                        eventType,
+                        LocalDateTime.now()
+                );
+
+        transactionEventProducer.publish(event);
     }
 
     private Transaction getOwnedTransaction(
