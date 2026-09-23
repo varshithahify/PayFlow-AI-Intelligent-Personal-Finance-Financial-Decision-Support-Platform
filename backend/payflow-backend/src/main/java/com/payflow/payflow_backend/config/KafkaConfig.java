@@ -6,19 +6,24 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
+@EnableKafka
 public class KafkaConfig {
 
     private static final String BOOTSTRAP_SERVERS =
@@ -81,27 +86,76 @@ public class KafkaConfig {
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 StringDeserializer.class);
 
+        /*
+         * Wrap the JSON deserializer with
+         * ErrorHandlingDeserializer so that
+         * deserialization failures can be
+         * handled by Spring Kafka's error handler.
+         */
         config.put(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-                JacksonJsonDeserializer.class);
+                ErrorHandlingDeserializer.class);
 
         config.put(
+                ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS,
+                JacksonJsonDeserializer.class.getName());
+
+        /*
+         * TransactionEvent belongs to this package.
+         *
+         * We trust only the event package instead
+         * of trusting the entire application package.
+         */
+        config.put(
                 JacksonJsonDeserializer.TRUSTED_PACKAGES,
-                "com.payflow.payflow_backend");
+                "com.payflow.payflow_backend.event");
 
         return new DefaultKafkaConsumerFactory<>(config);
     }
 
+    // -------------------------
+    // Kafka Error Handling
+    // -------------------------
+
+    @Bean
+    public DefaultErrorHandler kafkaErrorHandler() {
+
+        /*
+         * Retry failed Kafka messages 2 additional times
+         * after the initial attempt.
+         *
+         * Total attempts = 3
+         *
+         * Delay between attempts = 2 seconds.
+         */
+        FixedBackOff backOff =
+                new FixedBackOff(
+                        2000L,
+                        2L);
+
+        return new DefaultErrorHandler(
+                backOff);
+    }
+
+    // -------------------------
+    // Kafka Listener Container
+    // -------------------------
+
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Object>
     kafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> consumerFactory) {
+            ConsumerFactory<String, Object> consumerFactory,
+            DefaultErrorHandler kafkaErrorHandler) {
 
         ConcurrentKafkaListenerContainerFactory<String, Object>
                 factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(consumerFactory);
+        factory.setConsumerFactory(
+                consumerFactory);
+
+        factory.setCommonErrorHandler(
+                kafkaErrorHandler);
 
         return factory;
     }
