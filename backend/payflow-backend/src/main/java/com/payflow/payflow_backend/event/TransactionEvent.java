@@ -1,5 +1,7 @@
 package com.payflow.payflow_backend.event;
 
+import com.payflow.payflow_backend.entity.TransactionStatus;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -7,41 +9,45 @@ import java.util.UUID;
 public class TransactionEvent {
 
     private UUID eventId;
+
     private Long transactionId;
+
     private Long userId;
+
+    private BigDecimal amount;
+
+    private String currency;
+
+    private String paymentMethod;
+
+    private TransactionStatus status;
 
     private TransactionEventType eventType;
 
-    private BigDecimal amount;
-    private String currency;
-    private String paymentMethod;
-    private String status;
-
-    private LocalDateTime occurredAt;
+    private LocalDateTime timestamp;
 
     public TransactionEvent() {
     }
 
     public TransactionEvent(
-            UUID eventId,
             Long transactionId,
             Long userId,
-            TransactionEventType eventType,
             BigDecimal amount,
             String currency,
             String paymentMethod,
-            String status,
-            LocalDateTime occurredAt) {
+            TransactionStatus status,
+            TransactionEventType eventType,
+            LocalDateTime timestamp) {
 
-        this.eventId = eventId;
+        this.eventId = UUID.randomUUID();
         this.transactionId = transactionId;
         this.userId = userId;
-        this.eventType = eventType;
         this.amount = amount;
         this.currency = currency;
         this.paymentMethod = paymentMethod;
         this.status = status;
-        this.occurredAt = occurredAt;
+        this.eventType = eventType;
+        this.timestamp = timestamp;
     }
 
     public UUID getEventId() {
@@ -68,14 +74,6 @@ public class TransactionEvent {
         this.userId = userId;
     }
 
-    public TransactionEventType getEventType() {
-        return eventType;
-    }
-
-    public void setEventType(TransactionEventType eventType) {
-        this.eventType = eventType;
-    }
-
     public BigDecimal getAmount() {
         return amount;
     }
@@ -100,19 +98,27 @@ public class TransactionEvent {
         this.paymentMethod = paymentMethod;
     }
 
-    public String getStatus() {
+    public TransactionStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(TransactionStatus status) {
         this.status = status;
     }
 
-    public LocalDateTime getOccurredAt() {
-        return occurredAt;
+    public TransactionEventType getEventType() {
+        return eventType;
     }
 
-    public void setOccurredAt(LocalDateTime occurredAt) {
-        this.occurredAt = occurredAt;
+    public void setEventType(TransactionEventType eventType) {
+        this.eventType = eventType;
+    }
+
+    public LocalDateTime getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(LocalDateTime timestamp) {
+        this.timestamp = timestamp;
     }
 }
