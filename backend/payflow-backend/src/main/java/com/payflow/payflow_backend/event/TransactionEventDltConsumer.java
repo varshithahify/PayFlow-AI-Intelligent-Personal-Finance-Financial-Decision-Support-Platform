@@ -1,5 +1,6 @@
 package com.payflow.payflow_backend.event;
 
+import com.payflow.payflow_backend.service.ReconciliationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,6 +18,15 @@ public class TransactionEventDltConsumer {
 
     private static final String DLT_CONSUMER_GROUP =
             "payflow-dlt-group";
+
+    private final ReconciliationService reconciliationService;
+
+    public TransactionEventDltConsumer(
+            ReconciliationService reconciliationService) {
+
+        this.reconciliationService =
+                reconciliationService;
+    }
 
     @KafkaListener(
             topics = DLT_TOPIC,
@@ -36,6 +46,14 @@ public class TransactionEventDltConsumer {
 
         logger.error(
                 "Failed transaction event requires investigation: transactionId={}",
+                event.getTransactionId()
+        );
+
+        reconciliationService.reconcileTransaction(
+                event.getTransactionId());
+
+        logger.info(
+                "DLT event reconciliation completed: transactionId={}",
                 event.getTransactionId()
         );
     }
