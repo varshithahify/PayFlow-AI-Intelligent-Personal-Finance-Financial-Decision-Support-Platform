@@ -1,8 +1,6 @@
 package com.payflow.payflow_backend.service;
 
-import com.payflow.payflow_backend.entity.ProcessedEvent;
 import com.payflow.payflow_backend.repository.ProcessedEventRepository;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,37 +19,17 @@ public class ProcessedEventService {
                 processedEventRepository;
     }
 
-    @Transactional(readOnly = true)
-    public boolean alreadyProcessed(UUID eventId) {
-
-        return processedEventRepository
-                .existsByEventId(eventId);
-    }
-
     @Transactional
     public boolean tryMarkAsProcessed(
             UUID eventId,
             String eventType) {
 
-        if (alreadyProcessed(eventId)) {
-            return false;
-        }
+        int insertedRows =
+                processedEventRepository.insertIfNotExists(
+                        eventId,
+                        eventType,
+                        LocalDateTime.now());
 
-        try {
-            ProcessedEvent processedEvent =
-                    new ProcessedEvent(
-                            eventId,
-                            eventType,
-                            LocalDateTime.now());
-
-            processedEventRepository.saveAndFlush(
-                    processedEvent);
-
-            return true;
-
-        } catch (DataIntegrityViolationException exception) {
-
-            return false;
-        }
+        return insertedRows == 1;
     }
 }
