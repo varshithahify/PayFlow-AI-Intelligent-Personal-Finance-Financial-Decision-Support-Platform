@@ -13,6 +13,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
@@ -114,15 +115,40 @@ public class KafkaConfig {
     }
 
     // -------------------------
+    // Dead Letter Topic
+    // -------------------------
+
+    @Bean
+    public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
+            KafkaTemplate<String, Object> kafkaTemplate) {
+
+        /*
+         * When all retry attempts are exhausted,
+         * publish the failed Kafka record to a
+         * Dead Letter Topic.
+         *
+         * Example:
+         *
+         * transaction-events
+         *        ↓
+         * transaction-events.DLT
+         */
+        return new DeadLetterPublishingRecoverer(
+                kafkaTemplate);
+    }
+
+    // -------------------------
     // Kafka Error Handling
     // -------------------------
 
     @Bean
-    public DefaultErrorHandler kafkaErrorHandler() {
+    public DefaultErrorHandler kafkaErrorHandler(
+            DeadLetterPublishingRecoverer deadLetterPublishingRecoverer) {
 
         /*
-         * Retry failed Kafka messages 2 additional times
-         * after the initial attempt.
+         * Initial processing attempt
+         *        +
+         * 2 additional retries
          *
          * Total attempts = 3
          *
@@ -133,7 +159,13 @@ public class KafkaConfig {
                         2000L,
                         2L);
 
+        /*
+         * If all attempts fail,
+         * DeadLetterPublishingRecoverer publishes
+         * the failed record to the DLT.
+         */
         return new DefaultErrorHandler(
+                deadLetterPublishingRecoverer,
                 backOff);
     }
 
