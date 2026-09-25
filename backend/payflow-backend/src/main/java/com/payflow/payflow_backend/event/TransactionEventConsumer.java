@@ -1,13 +1,10 @@
 package com.payflow.payflow_backend.event;
 
+import com.payflow.payflow_backend.service.ProcessedEventService;
 import com.payflow.payflow_backend.service.ReconciliationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,11 +22,17 @@ public class TransactionEventConsumer {
 
     private final ReconciliationService reconciliationService;
 
+    private final ProcessedEventService processedEventService;
+
     public TransactionEventConsumer(
-            ReconciliationService reconciliationService) {
+            ReconciliationService reconciliationService,
+            ProcessedEventService processedEventService) {
 
         this.reconciliationService =
                 reconciliationService;
+
+        this.processedEventService =
+                processedEventService;
     }
 
     @KafkaListener(
@@ -45,6 +48,21 @@ public class TransactionEventConsumer {
                 event.getEventType(),
                 event.getStatus()
         );
+
+        boolean claimed =
+                processedEventService.tryMarkAsProcessed(
+                        event.getEventId(),
+                        event.getEventType().name());
+
+        if (!claimed) {
+
+            logger.info(
+                    "Skipping already processed event: eventId={}",
+                    event.getEventId()
+            );
+
+            return;
+        }
 
         switch (event.getEventType()) {
 
@@ -71,5 +89,10 @@ public class TransactionEventConsumer {
 
                 break;
         }
+
+        logger.info(
+                "Marked event as processed: eventId={}",
+                event.getEventId()
+        );
     }
 }
