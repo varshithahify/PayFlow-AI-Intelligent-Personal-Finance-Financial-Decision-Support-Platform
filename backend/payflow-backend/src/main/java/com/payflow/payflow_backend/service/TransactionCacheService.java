@@ -6,11 +6,16 @@ import com.payflow.payflow_backend.entity.Transaction;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+
 @Service
 public class TransactionCacheService {
 
     private static final String TRANSACTION_KEY_PREFIX =
             "transaction:";
+
+    private static final Duration CACHE_TTL =
+            Duration.ofMinutes(10);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -37,7 +42,8 @@ public class TransactionCacheService {
 
             redisTemplate.opsForValue().set(
                     key,
-                    transactionData);
+                    transactionData,
+                    CACHE_TTL);
 
         } catch (JsonProcessingException exception) {
 
