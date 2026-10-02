@@ -64,10 +64,6 @@ public class TransactionService {
             throw new ResourceNotFoundException("User not found");
         }
 
-        /*
-         * Check whether this idempotency key has already
-         * been used by this user.
-         */
         var existingTransaction =
                 transactionRepository.findByUserIdAndIdempotencyKey(
                         user.getId(),
@@ -77,20 +73,11 @@ public class TransactionService {
 
             Transaction existing = existingTransaction.get();
 
-            /*
-             * The same idempotency key cannot represent
-             * a different payment request.
-             */
             if (!isSameRequest(existing, request)) {
                 throw new IllegalStateException(
                         "Idempotency key already exists for a different transaction");
             }
 
-            /*
-             * Duplicate request:
-             * return the original transaction instead
-             * of creating another transaction.
-             */
             return new TransactionResponse(existing);
         }
 
@@ -106,12 +93,6 @@ public class TransactionService {
         Transaction savedTransaction =
                 transactionRepository.save(transaction);
 
-        /*
-         * Publish transaction-created event.
-         *
-         * Kafka is used to notify downstream services
-         * that a new transaction has been created.
-         */
         publishTransactionEvent(
                 savedTransaction,
                 TransactionEventType.CREATED);
@@ -157,10 +138,7 @@ public class TransactionService {
         }
 
         /*
-         * First check Redis using the authenticated user's ID.
-         *
-         * The user ID is part of the cache key so that
-         * one user cannot receive another user's transaction.
+         * Check Redis first.
          */
         Transaction cachedTransaction =
                 transactionCacheService.getCachedTransaction(
@@ -174,14 +152,14 @@ public class TransactionService {
 
         /*
          * Cache miss:
-         * load the transaction from PostgreSQL and verify ownership.
+         * load the transaction from PostgreSQL
+         * and verify ownership.
          */
         Transaction transaction =
                 getOwnedTransaction(id, email);
 
         /*
-         * Store the verified transaction in Redis
-         * for subsequent reads.
+         * Cache the verified transaction.
          */
         transactionCacheService.cacheTransaction(
                 user.getId(),
@@ -204,11 +182,6 @@ public class TransactionService {
                     "Only CREATED transactions can move to PROCESSING");
         }
 
-        /*
-         * Get all gateways that support this payment method.
-         * This allows us to fail over to another gateway
-         * when the first gateway fails.
-         */
         List<PaymentGateway> gateways =
                 gatewayRouter.routeAll(transaction);
 
@@ -217,24 +190,19 @@ public class TransactionService {
         transactionRepository.save(transaction);
 
         /*
-         * Publish PROCESSING event.
+         * The database now contains PROCESSING.
+         * Remove the old Redis value.
          */
+        transactionCacheService.evictTransaction(
+                transaction.getUserId(),
+                transaction.getId());
+
         publishTransactionEvent(
                 transaction,
                 TransactionEventType.PROCESSING);
 
         GatewayResult successfulResult = null;
 
-        /*
-         * Try gateways one by one.
-         *
-         * Example:
-         *
-         * Gateway A -> FAILED
-         * Gateway B -> SUCCESS
-         *
-         * The transaction will ultimately become SUCCESS.
-         */
         for (PaymentGateway gateway : gateways) {
 
             GatewayResult result =
@@ -246,12 +214,6 @@ public class TransactionService {
             }
         }
 
-        /*
-         * If any gateway succeeded, mark the transaction
-         * as SUCCESS.
-         *
-         * If every gateway failed, mark it as FAILED.
-         */
         if (successfulResult != null) {
             transaction.setStatus(TransactionStatus.SUCCESS);
         } else {
@@ -262,8 +224,14 @@ public class TransactionService {
                 transactionRepository.save(transaction);
 
         /*
-         * Publish the final transaction event.
+         * The final status changed again.
+         * Remove Redis so the next GET loads the latest
+         * value from PostgreSQL.
          */
+        transactionCacheService.evictTransaction(
+                updatedTransaction.getUserId(),
+                updatedTransaction.getId());
+
         if (updatedTransaction.getStatus()
                 == TransactionStatus.SUCCESS) {
 
@@ -300,8 +268,12 @@ public class TransactionService {
                 transactionRepository.save(transaction);
 
         /*
-         * Publish SUCCESS event.
+         * Invalidate stale Redis data.
          */
+        transactionCacheService.evictTransaction(
+                updatedTransaction.getUserId(),
+                updatedTransaction.getId());
+
         publishTransactionEvent(
                 updatedTransaction,
                 TransactionEventType.SUCCESS);
@@ -328,8 +300,12 @@ public class TransactionService {
                 transactionRepository.save(transaction);
 
         /*
-         * Publish FAILED event.
+         * Invalidate stale Redis data.
          */
+        transactionCacheService.evictTransaction(
+                updatedTransaction.getUserId(),
+                updatedTransaction.getId());
+
         publishTransactionEvent(
                 updatedTransaction,
                 TransactionEventType.FAILED);
@@ -346,12 +322,16 @@ public class TransactionService {
                 getOwnedTransaction(id, email);
 
         transactionRepository.delete(transaction);
+
+        /*
+         * The transaction no longer exists in PostgreSQL,
+         * so it must also be removed from Redis.
+         */
+        transactionCacheService.evictTransaction(
+                transaction.getUserId(),
+                transaction.getId());
     }
 
-    /*
-     * Creates and publishes a Kafka event for the
-     * current transaction state.
-     */
     private void publishTransactionEvent(
             Transaction transaction,
             TransactionEventType eventType) {
@@ -387,9 +367,6 @@ public class TransactionService {
             throw new ResourceNotFoundException("User not found");
         }
 
-        /*
-         * Users can access only their own transactions.
-         */
         if (!transaction.getUserId().equals(user.getId())) {
             throw new ResourceNotFoundException(
                     "Transaction not found");
