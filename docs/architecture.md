@@ -1,102 +1,110 @@
-# PayFlow AI
-## System Architecture
+# PayFlow AI — Multi-Tenant Payment Orchestration & Analytics Platform
+
+## 1. Product Overview
+
+PayFlow AI is a production-oriented, multi-tenant payment orchestration and analytics platform.
+
+The platform enables multiple merchants/organizations to process and monitor payments through a common system while keeping tenant data isolated.
+
+The platform provides:
+
+- Multi-tenant payment processing
+- Payment gateway routing
+- Gateway health monitoring
+- Gateway failover
+- Idempotent payment initiation
+- Fraud detection using rules and machine learning
+- Transaction state management
+- Webhook handling
+- Kafka-based event processing
+- Automated settlement reconciliation
+- Investigation management
+- Real-time notifications
+- Merchant analytics
+- Operational monitoring
 
 ---
 
-# 1. Architecture Overview
+## 2. Core Business Problem
 
-PayFlow AI is designed as a modular full-stack application with
-event-driven capabilities.
+A payment gateway and an internal payment system can temporarily disagree about the state of a transaction.
 
-The initial implementation will use a modular Spring Boot backend.
-The architecture will maintain clear module boundaries so that
-selected components can be extracted into independent services if
-required in future versions.
+For example:
 
-The major architectural layers are:
+1. A customer initiates a payment.
+2. The external gateway processes the payment successfully.
+3. The application or database experiences a failure while recording the result.
+4. The external gateway reports SUCCESS while the internal system still contains PROCESSING or another incomplete state.
 
-1. React Frontend
-2. REST API Layer
-3. Application / Business Logic Layer
-4. Event Processing Layer
-5. AI Investigation Layer
-6. Data Layer
-7. Infrastructure Layer
+This creates a payment-state inconsistency.
+
+PayFlow AI addresses this problem using:
+
+- Idempotency
+- Durable transaction state
+- Gateway and webhook handling
+- Event-driven processing
+- Auditability
+- Settlement reconciliation
+- Investigation workflows
 
 ---
 
-# 2. High-Level Architecture
+## 3. Product Scope
+
+The platform consists of:
+
+- API Gateway
+- Auth Service
+- Payment Service
+- Fraud Service
+- Reconciliation Service
+- Notification Service
+- React Frontend
+- PostgreSQL
+- Redis
+- Apache Kafka
+
+The Fraud Service is implemented separately using Python and FastAPI.
+
+The primary backend services are implemented using Java and Spring Boot.
+
+---
+
+## 4. Target System Architecture
 
 ```text
-                         PAYFLOW AI
-                             |
-                             v
-                  +----------------------+
-                  |    React Frontend    |
-                  | React + Redux        |
-                  +----------+-----------+
-                             |
-                        REST / JSON
-                             |
-                             v
-                  +----------------------+
-                  | Spring Boot API      |
-                  | Spring MVC           |
-                  | Spring Security      |
-                  +----------+-----------+
-                             |
-              +--------------+--------------+
-              |              |              |
-              v              v              v
-       +-------------+ +-------------+ +-------------+
-       | Payment     | | Reconciliation| | Investigation|
-       | Module      | | Module       | | Module      |
-       +------+------+ +------+------+ +------+------+
-              |               |               |
-              +---------------+---------------+
-                              |
-                              v
-                   +-----------------------+
-                   | Application Services  |
-                   +-----------+-----------+
-                               |
-              +----------------+----------------+
-              |                |                |
-              v                v                v
-       +-------------+  +-------------+  +-------------+
-       | PostgreSQL  |  | Redis       |  | Kafka       |
-       |             |  |             |  |             |
-       | Source of   |  | Cache /     |  | Event Bus   |
-       | Truth       |  | Fast State  |  |             |
-       +-------------+  +-------------+  +------+------+
-                                                |
-                                                v
-                                     +---------------------+
-                                     | Event Consumers     |
-                                     +----------+----------+
-                                                |
-                                                v
-                                     +---------------------+
-                                     | AI Investigation    |
-                                     | Spring AI           |
-                                     +----------+----------+
-                                                |
-                                                v
-                                     +---------------------+
-                                     | Safety / Policy     |
-                                     | Engine              |
-                                     +----------+----------+
-                                                |
-                                      +---------+---------+
-                                      |                   |
-                                      v                   v
-                              +---------------+   +---------------+
-                              | Auto Resolve  |   | Human Approval|
-                              +-------+-------+   +-------+-------+
-                                      |                   |
-                                      +---------+---------+
-                                                |
-                                                v
-                                      +----------------+
-                                      | Audit Trail    |
-                                      +----------------+
+                         React Frontend
+                              :3000
+                                |
+                                v
+                        +----------------+
+                        |  API Gateway   |
+                        |     :8080      |
+                        +-------+--------+
+                                |
+              +-----------------+------------------+
+              |                 |                  |
+              v                 v                  v
+       +-------------+   +-------------+   +----------------+
+       | Auth        |   | Payment     |   | Reconciliation |
+       | Service     |   | Service     |   | Service        |
+       | :8081       |   | :8082       |   | :8084          |
+       +-------------+   +------+------+   +----------------+
+                                |
+                                v
+                         +-------------+
+                         | Fraud       |
+                         | Service     |
+                         | :8083       |
+                         +-------------+
+
+                         +-------------+
+                         | Notification|
+                         | Service     |
+                         | :8085       |
+                         +-------------+
+
+                +----------------------------------+
+                | PostgreSQL | Redis | Kafka       |
+                +----------------------------------+
