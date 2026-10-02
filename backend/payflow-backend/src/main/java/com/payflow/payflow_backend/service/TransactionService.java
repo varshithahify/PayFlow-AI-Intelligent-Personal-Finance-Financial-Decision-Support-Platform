@@ -27,18 +27,22 @@ public class TransactionService {
     private final UserRepository userRepository;
     private final GatewayRouter gatewayRouter;
     private final TransactionEventProducer transactionEventProducer;
+    private final TransactionCacheService transactionCacheService;
 
     public TransactionService(
             TransactionRepository transactionRepository,
             UserRepository userRepository,
             GatewayRouter gatewayRouter,
-            TransactionEventProducer transactionEventProducer) {
+            TransactionEventProducer transactionEventProducer,
+            TransactionCacheService transactionCacheService) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
         this.gatewayRouter = gatewayRouter;
         this.transactionEventProducer =
                 transactionEventProducer;
+        this.transactionCacheService =
+                transactionCacheService;
     }
 
     @Transactional
@@ -84,8 +88,8 @@ public class TransactionService {
 
             /*
              * Duplicate request:
-             * return the original transaction instead of
-             * creating another transaction.
+             * return the original transaction instead
+             * of creating another transaction.
              */
             return new TransactionResponse(existing);
         }
@@ -105,8 +109,8 @@ public class TransactionService {
         /*
          * Publish transaction-created event.
          *
-         * Kafka is used to notify downstream services that
-         * a new transaction has been created.
+         * Kafka is used to notify downstream services
+         * that a new transaction has been created.
          */
         publishTransactionEvent(
                 savedTransaction,
@@ -146,8 +150,43 @@ public class TransactionService {
             Long id,
             String email) {
 
+        User user = userRepository.findByEmail(email);
+
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        /*
+         * First check Redis using the authenticated user's ID.
+         *
+         * The user ID is part of the cache key so that
+         * one user cannot receive another user's transaction.
+         */
+        Transaction cachedTransaction =
+                transactionCacheService.getCachedTransaction(
+                        user.getId(),
+                        id);
+
+        if (cachedTransaction != null) {
+
+            return new TransactionResponse(cachedTransaction);
+        }
+
+        /*
+         * Cache miss:
+         * load the transaction from PostgreSQL and verify ownership.
+         */
         Transaction transaction =
                 getOwnedTransaction(id, email);
+
+        /*
+         * Store the verified transaction in Redis
+         * for subsequent reads.
+         */
+        transactionCacheService.cacheTransaction(
+                user.getId(),
+                transaction.getId(),
+                transaction);
 
         return new TransactionResponse(transaction);
     }
