@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.payflow</groupId>
-    <artifactId>payflow-common</artifactId>
+    <artifactId>payflow-reconciliation</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
     <packaging>jar</packaging>
 
-    <name>payflow-common</name>
-    <description>Shared DTOs, exceptions and utilities for PayFlow AI</description>
+    <name>payflow-reconciliation</name>
+    <description>Settlement reconciliation service for PayFlow AI</description>
 
     <properties>
         <java.version>21</java.version>
