@@ -20,6 +20,9 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "org_id", nullable = false)
+    private Long orgId;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -30,6 +33,20 @@ public class User {
         this.name = name;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.orgId = 1L;
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public User(
+            String name,
+            String email,
+            String passwordHash,
+            Long orgId
+    ) {
+        this.name = name;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.orgId = orgId;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -66,6 +83,14 @@ public class User {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public Long getOrgId() {
+        return orgId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public LocalDateTime getCreatedAt() {
