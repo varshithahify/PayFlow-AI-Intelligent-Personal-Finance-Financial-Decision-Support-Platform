@@ -25,9 +25,14 @@ public class JwtService {
         this.expirationTime = expirationTime;
     }
 
-    public String generateToken(String email, Long orgId) {
+    public String generateToken(
+            String email,
+            Long orgId,
+            String role
+    ) {
 
         Date now = new Date();
+
         Date expiration = new Date(
                 now.getTime() + expirationTime
         );
@@ -35,6 +40,7 @@ public class JwtService {
         return Jwts.builder()
                 .subject(email)
                 .claim("orgId", orgId)
+                .claim("role", role)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(secretKey)
@@ -53,18 +59,40 @@ public class JwtService {
 
     public Long extractOrgId(String token) {
 
+        Object orgId = Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("orgId");
+
+        if (orgId instanceof Number number) {
+            return number.longValue();
+        }
+
+        if (orgId instanceof String value) {
+            return Long.parseLong(value);
+        }
+
+        throw new IllegalArgumentException("Invalid orgId claim");
+    }
+
+    public String extractRole(String token) {
+
         return Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload()
-                .get("orgId", Long.class);
+                .get("role", String.class);
     }
 
     public boolean isTokenValid(String token) {
 
         try {
             extractEmail(token);
+            extractOrgId(token);
+            extractRole(token);
             return true;
         } catch (Exception e) {
             return false;

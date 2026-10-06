@@ -35,13 +35,11 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
-
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(
                                 SessionCreationPolicy.STATELESS
                         )
                 )
-
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/register",
@@ -51,7 +49,6 @@ public class SecurityConfig {
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
-
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class
@@ -62,9 +59,7 @@ public class SecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService() {
-
         return username -> {
-
             User user = userRepository.findByEmail(username);
 
             if (user == null) {
@@ -76,7 +71,7 @@ public class SecurityConfig {
             return org.springframework.security.core.userdetails.User
                     .withUsername(user.getEmail())
                     .password(user.getPasswordHash())
-                    .authorities(new String[0])
+                    .authorities("ROLE_" + user.getRole().name())
                     .build();
         };
     }

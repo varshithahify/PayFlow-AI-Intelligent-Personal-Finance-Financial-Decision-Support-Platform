@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
+    private static final Long DEFAULT_ORG_ID = 1L;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -39,7 +41,8 @@ public class AuthService {
         User user = new User(
                 request.getName(),
                 request.getEmail(),
-                hashedPassword
+                hashedPassword,
+                DEFAULT_ORG_ID
         );
 
         return userRepository.save(user);
@@ -62,6 +65,10 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid email or password");
         }
 
-        return jwtService.generateToken(user.getEmail());
+        return jwtService.generateToken(
+        user.getEmail(),
+        user.getOrgId(),
+        user.getRole().name()
+);
     }
 }
