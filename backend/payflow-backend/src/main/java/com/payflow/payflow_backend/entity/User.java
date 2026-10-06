@@ -23,6 +23,10 @@ public class User {
     @Column(name = "org_id", nullable = false)
     private Long orgId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private Role role;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -34,6 +38,7 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.orgId = 1L;
+        this.role = Role.MERCHANT_ADMIN;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -47,6 +52,22 @@ public class User {
         this.email = email;
         this.passwordHash = passwordHash;
         this.orgId = orgId;
+        this.role = Role.MERCHANT_ADMIN;
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public User(
+            String name,
+            String email,
+            String passwordHash,
+            Long orgId,
+            Role role
+    ) {
+        this.name = name;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.orgId = orgId;
+        this.role = role;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -54,6 +75,10 @@ public class User {
     protected void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+
+        if (role == null) {
+            role = Role.MERCHANT_ADMIN;
         }
     }
 
@@ -91,6 +116,14 @@ public class User {
 
     public void setOrgId(Long orgId) {
         this.orgId = orgId;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
     }
 
     public LocalDateTime getCreatedAt() {
