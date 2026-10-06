@@ -25,7 +25,7 @@ public class JwtService {
         this.expirationTime = expirationTime;
     }
 
-    public String generateToken(String email) {
+    public String generateToken(String email, Long orgId) {
 
         Date now = new Date();
         Date expiration = new Date(
@@ -34,6 +34,7 @@ public class JwtService {
 
         return Jwts.builder()
                 .subject(email)
+                .claim("orgId", orgId)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(secretKey)
@@ -48,6 +49,16 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+
+    public Long extractOrgId(String token) {
+
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("orgId", Long.class);
     }
 
     public boolean isTokenValid(String token) {
