@@ -36,6 +36,7 @@ class TransactionEventConsumerTransactionTest {
                 new TransactionEvent(
                         12L,
                         3L,
+                        1L,
                         new BigDecimal("5000.00"),
                         "INR",
                         "UPI",
