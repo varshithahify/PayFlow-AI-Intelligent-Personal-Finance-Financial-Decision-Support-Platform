@@ -28,6 +28,9 @@ public class Transaction {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(name = "org_id", nullable = false)
+    private Long orgId;
+
     @Column(name = "idempotency_key", length = 100)
     private String idempotencyKey;
 
@@ -46,6 +49,7 @@ public class Transaction {
             String paymentMethod,
             TransactionStatus status,
             Long userId,
+            Long orgId,
             String idempotencyKey) {
 
         this.amount = amount;
@@ -53,6 +57,7 @@ public class Transaction {
         this.paymentMethod = paymentMethod;
         this.status = status;
         this.userId = userId;
+        this.orgId = orgId;
         this.idempotencyKey = idempotencyKey;
     }
 
@@ -92,6 +97,10 @@ public class Transaction {
         return userId;
     }
 
+    public Long getOrgId() {
+        return orgId;
+    }
+
     public String getIdempotencyKey() {
         return idempotencyKey;
     }
@@ -126,6 +135,10 @@ public class Transaction {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public void setIdempotencyKey(String idempotencyKey) {

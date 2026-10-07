@@ -60,6 +60,7 @@ class TransactionServiceTest {
     private TransactionService transactionService;
 
     private static final Long USER_ID = 1L;
+    private static final Long ORG_ID = 1L;
     private static final Long TRANSACTION_ID = 100L;
     private static final String EMAIL = "merchant@test.com";
 
@@ -157,6 +158,9 @@ class TransactionServiceTest {
     @Test
     void shouldProcessTransactionSuccessfully() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -212,6 +216,9 @@ class TransactionServiceTest {
 
     @Test
     void shouldUseFallbackGatewayWhenFirstGatewayFails() {
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
 
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
@@ -284,6 +291,9 @@ class TransactionServiceTest {
     @Test
     void shouldMarkTransactionFailedWhenAllGatewaysFail() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -355,6 +365,9 @@ class TransactionServiceTest {
     @Test
     void shouldRecordHealthForEveryGatewayAttempt() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -405,6 +418,9 @@ class TransactionServiceTest {
     @Test
     void shouldPublishKafkaEventsDuringProcessing() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -442,6 +458,9 @@ class TransactionServiceTest {
 
     @Test
     void shouldEvictCacheWhenTransactionStateChanges() {
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
 
         Transaction transaction = createTransaction(
                 TRANSACTION_ID,
@@ -492,6 +511,7 @@ class TransactionServiceTest {
                 "UPI",
                 status,
                 USER_ID,
+                ORG_ID,
                 idempotencyKey
         );
 

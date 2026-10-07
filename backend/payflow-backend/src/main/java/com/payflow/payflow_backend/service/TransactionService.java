@@ -43,10 +43,8 @@ public class TransactionService {
         this.userRepository = userRepository;
         this.gatewayRouter = gatewayRouter;
         this.gatewayHealthService = gatewayHealthService;
-        this.transactionEventProducer =
-                transactionEventProducer;
-        this.transactionCacheService =
-                transactionCacheService;
+        this.transactionEventProducer = transactionEventProducer;
+        this.transactionCacheService = transactionCacheService;
     }
 
     @Transactional
@@ -91,6 +89,7 @@ public class TransactionService {
                 request.getPaymentMethod(),
                 TransactionStatus.CREATED,
                 user.getId(),
+                user.getOrgId(),
                 normalizedKey
         );
 
@@ -384,7 +383,12 @@ public class TransactionService {
             throw new ResourceNotFoundException("User not found");
         }
 
-        if (!transaction.getUserId().equals(user.getId())) {
+        /*
+         * Verify both user ownership and organization ownership.
+         */
+        if (!transaction.getUserId().equals(user.getId())
+                || !transaction.getOrgId().equals(user.getOrgId())) {
+
             throw new ResourceNotFoundException(
                     "Transaction not found");
         }
