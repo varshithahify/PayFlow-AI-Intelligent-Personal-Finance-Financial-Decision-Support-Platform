@@ -232,8 +232,21 @@ public class TransactionService {
         }
 
         if (successfulResult != null) {
+
             transaction.setStatus(TransactionStatus.SUCCESS);
+
+            /*
+             * Store the gateway that actually processed
+             * the successful payment.
+             *
+             * This is required later so that refunds are
+             * sent to the same gateway.
+             */
+            transaction.setGatewayName(
+                    successfulResult.getGatewayName());
+
         } else {
+
             transaction.setStatus(TransactionStatus.FAILED);
         }
 
@@ -262,6 +275,88 @@ public class TransactionService {
                     updatedTransaction,
                     TransactionEventType.FAILED);
         }
+
+        return new TransactionResponse(updatedTransaction);
+    }
+
+    @Transactional
+    public TransactionResponse refundTransaction(
+            Long id,
+            String email) {
+
+        Transaction transaction =
+                getOwnedTransaction(id, email);
+
+        /*
+         * Only a successfully completed payment
+         * can be refunded.
+         */
+        if (transaction.getStatus()
+                != TransactionStatus.SUCCESS) {
+
+            throw new IllegalStateException(
+                    "Only SUCCESS transactions can be refunded");
+        }
+
+        /*
+         * The original gateway must be available.
+         * We cannot safely refund through another gateway.
+         */
+        if (transaction.getGatewayName() == null
+                || transaction.getGatewayName().isBlank()) {
+
+            throw new IllegalStateException(
+                    "Original payment gateway is not available");
+        }
+
+        /*
+         * Find the exact gateway that processed
+         * the original payment.
+         */
+        PaymentGateway gateway =
+                gatewayRouter.getGatewayByName(
+                        transaction.getGatewayName());
+
+        /*
+         * Execute the refund through the original gateway.
+         */
+        GatewayResult refundResult =
+                gateway.refundPayment(transaction);
+
+        if (!refundResult.isSuccess()) {
+
+            /*
+             * The original payment remains SUCCESS.
+             * A failed refund must not change the
+             * payment status to FAILED.
+             */
+            throw new IllegalStateException(
+                    "Refund failed: "
+                            + refundResult.getMessage());
+        }
+
+        /*
+         * Refund succeeded.
+         */
+        transaction.setStatus(TransactionStatus.REFUNDED);
+
+        Transaction updatedTransaction =
+                transactionRepository.save(transaction);
+
+        /*
+         * Remove stale Redis data.
+         */
+        transactionCacheService.evictTransaction(
+                updatedTransaction.getUserId(),
+                updatedTransaction.getId());
+
+        /*
+         * Notify Kafka consumers that the transaction
+         * has been refunded.
+         */
+        publishTransactionEvent(
+                updatedTransaction,
+                TransactionEventType.REFUNDED);
 
         return new TransactionResponse(updatedTransaction);
     }

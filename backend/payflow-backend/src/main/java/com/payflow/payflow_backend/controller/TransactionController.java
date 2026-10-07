@@ -87,6 +87,17 @@ public class TransactionController {
                         authentication.getName()));
     }
 
+    @PostMapping("/{id}/refund")
+    public ResponseEntity<TransactionResponse> refundTransaction(
+            @PathVariable Long id,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(
+                transactionService.refundTransaction(
+                        id,
+                        authentication.getName()));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTransaction(
             @PathVariable Long id,

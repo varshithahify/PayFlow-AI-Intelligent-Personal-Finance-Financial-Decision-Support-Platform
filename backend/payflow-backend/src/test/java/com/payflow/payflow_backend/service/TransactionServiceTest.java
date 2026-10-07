@@ -7,6 +7,8 @@ import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
 import com.payflow.payflow_backend.event.TransactionEvent;
 import com.payflow.payflow_backend.event.TransactionEventProducer;
+import com.payflow.payflow_backend.event.TransactionEventType;
+import com.payflow.payflow_backend.exception.ResourceNotFoundException;
 import com.payflow.payflow_backend.gateway.GatewayHealthService;
 import com.payflow.payflow_backend.gateway.GatewayResult;
 import com.payflow.payflow_backend.gateway.GatewayRouter;
@@ -16,6 +18,7 @@ import com.payflow.payflow_backend.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -507,6 +510,294 @@ class TransactionServiceTest {
                         TRANSACTION_ID
                 );
     }
+
+    @Test
+void shouldRefundSuccessfulTransactionUsingOriginalGateway() {
+
+    when(user.getOrgId())
+            .thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.SUCCESS,
+            "idem-refund");
+
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+
+    when(gatewayRouter.getGatewayByName("GatewayA"))
+            .thenReturn(gatewayA);
+
+    when(gatewayA.refundPayment(transaction))
+            .thenReturn(
+                    GatewayResult.success(
+                            "GatewayA",
+                            "Refund successful"));
+
+    when(transactionRepository.save(transaction))
+            .thenReturn(transaction);
+
+    TransactionResponse response =
+            transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL);
+
+    assertNotNull(response);
+
+    assertEquals(
+            TransactionStatus.REFUNDED,
+            transaction.getStatus());
+
+    assertEquals(
+            "GatewayA",
+            transaction.getGatewayName());
+
+    verify(gatewayRouter, times(1))
+            .getGatewayByName("GatewayA");
+
+    verify(gatewayA, times(1))
+            .refundPayment(transaction);
+
+    verify(transactionRepository, times(1))
+            .save(transaction);
+
+    verify(transactionCacheService, times(1))
+            .evictTransaction(
+                    USER_ID,
+                    TRANSACTION_ID);
+
+    verify(transactionEventProducer, times(1))
+            .publish(any(TransactionEvent.class));
+}
+
+        @Test
+void shouldRejectRefundForNonSuccessfulTransaction() {
+
+    when(user.getOrgId())
+            .thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.CREATED,
+            "idem-refund-invalid");
+
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+
+    assertThrows(
+            IllegalStateException.class,
+            () -> transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL));
+
+    verify(gatewayRouter, never())
+            .getGatewayByName(anyString());
+
+    verify(gatewayA, never())
+            .refundPayment(any(Transaction.class));
+
+    verify(transactionRepository, never())
+            .save(any(Transaction.class));
+
+    verify(transactionEventProducer, never())
+            .publish(any(TransactionEvent.class));
+}
+
+        @Test
+void shouldRejectRefundWhenOriginalGatewayIsMissing() {
+
+    when(user.getOrgId())
+            .thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.SUCCESS,
+            "idem-refund-no-gateway");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+
+    assertThrows(
+            IllegalStateException.class,
+            () -> transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL));
+
+    verify(gatewayRouter, never())
+            .getGatewayByName(anyString());
+
+    verify(gatewayA, never())
+            .refundPayment(any(Transaction.class));
+
+    verify(gatewayB, never())
+            .refundPayment(any(Transaction.class));
+
+    verify(transactionRepository, never())
+            .save(any(Transaction.class));
+
+    verify(transactionEventProducer, never())
+            .publish(any(TransactionEvent.class));
+}
+        @Test
+void shouldRejectRefundWhenGatewayRefundFails() {
+    when(user.getOrgId()).thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.SUCCESS,
+            "idem-refund-gateway-failure");
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+    when(gatewayRouter.getGatewayByName("GatewayA"))
+            .thenReturn(gatewayA);
+    when(gatewayA.refundPayment(transaction))
+            .thenReturn(GatewayResult.failure(
+                    "GatewayA",
+                    "Refund declined by gateway"));
+
+    assertThrows(
+            IllegalStateException.class,
+            () -> transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL));
+
+    assertEquals(TransactionStatus.SUCCESS, transaction.getStatus());
+
+    verify(gatewayRouter).getGatewayByName("GatewayA");
+    verify(gatewayA).refundPayment(transaction);
+    verify(transactionRepository, never()).save(any(Transaction.class));
+    verify(transactionCacheService, never())
+            .evictTransaction(anyLong(), anyLong());
+    verify(transactionEventProducer, never())
+            .publish(any(TransactionEvent.class));
+}
+
+        @Test
+void shouldRejectRefundForAlreadyRefundedTransaction() {
+    when(user.getOrgId()).thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.REFUNDED,
+            "idem-refund-already-refunded");
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+
+    assertThrows(
+            IllegalStateException.class,
+            () -> transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL));
+
+    verify(gatewayRouter, never()).getGatewayByName(anyString());
+    verify(gatewayA, never()).refundPayment(any(Transaction.class));
+    verify(gatewayB, never()).refundPayment(any(Transaction.class));
+    verify(transactionRepository, never()).save(any(Transaction.class));
+    verify(transactionEventProducer, never())
+            .publish(any(TransactionEvent.class));
+}
+
+        @Test
+void shouldRejectRefundWhenTransactionBelongsToAnotherOrganization() {
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.SUCCESS,
+            "idem-refund-other-org");
+
+    transaction.setUserId(USER_ID + 1);
+    transaction.setOrgId(ORG_ID + 1);
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+
+    assertThrows(
+            ResourceNotFoundException.class,
+            () -> transactionService.refundTransaction(
+                    TRANSACTION_ID,
+                    EMAIL));
+
+    verify(gatewayRouter, never()).getGatewayByName(anyString());
+    verify(gatewayA, never()).refundPayment(any(Transaction.class));
+    verify(gatewayB, never()).refundPayment(any(Transaction.class));
+    verify(transactionRepository, never()).save(any(Transaction.class));
+    verify(transactionEventProducer, never())
+            .publish(any(TransactionEvent.class));
+}
+        @Test
+void shouldPublishRefundedEventAfterSuccessfulRefund() {
+    when(user.getOrgId()).thenReturn(ORG_ID);
+
+    Transaction transaction = createTransaction(
+            TRANSACTION_ID,
+            TransactionStatus.SUCCESS,
+            "idem-refund-event");
+    transaction.setGatewayName("GatewayA");
+
+    when(transactionRepository.findById(TRANSACTION_ID))
+            .thenReturn(Optional.of(transaction));
+    when(userRepository.findByEmail(EMAIL))
+            .thenReturn(user);
+    when(gatewayRouter.getGatewayByName("GatewayA"))
+            .thenReturn(gatewayA);
+    when(gatewayA.refundPayment(transaction))
+            .thenReturn(GatewayResult.success(
+                    "GatewayA",
+                    "Refund successful"));
+    when(transactionRepository.save(transaction))
+            .thenReturn(transaction);
+
+    transactionService.refundTransaction(
+            TRANSACTION_ID,
+            EMAIL);
+
+    ArgumentCaptor<TransactionEvent> eventCaptor =
+            ArgumentCaptor.forClass(TransactionEvent.class);
+
+    verify(transactionEventProducer).publish(eventCaptor.capture());
+
+    TransactionEvent event = eventCaptor.getValue();
+
+    assertEquals(
+            TransactionEventType.REFUNDED,
+            event.getEventType());
+
+    assertEquals(
+            TransactionStatus.REFUNDED,
+            event.getStatus());
+
+    assertEquals(
+            TRANSACTION_ID,
+            event.getTransactionId());
+
+    assertEquals(
+            ORG_ID,
+            event.getOrgId());
+}
 
     private Transaction createTransaction(
             Long id,

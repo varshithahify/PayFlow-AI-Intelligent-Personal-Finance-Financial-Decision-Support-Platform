@@ -34,6 +34,9 @@ public class Transaction {
     @Column(name = "idempotency_key", length = 100)
     private String idempotencyKey;
 
+    @Column(name = "gateway_name", length = 50)
+    private String gatewayName;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -105,6 +108,10 @@ public class Transaction {
         return idempotencyKey;
     }
 
+    public String getGatewayName() {
+        return gatewayName;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -143,6 +150,10 @@ public class Transaction {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public void setGatewayName(String gatewayName) {
+        this.gatewayName = gatewayName;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {

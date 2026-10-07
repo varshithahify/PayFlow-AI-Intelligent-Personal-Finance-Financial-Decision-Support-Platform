@@ -9,4 +9,6 @@ public interface PaymentGateway {
     boolean supports(String paymentMethod);
 
     GatewayResult processPayment(Transaction transaction);
+
+    GatewayResult refundPayment(Transaction transaction);
 }

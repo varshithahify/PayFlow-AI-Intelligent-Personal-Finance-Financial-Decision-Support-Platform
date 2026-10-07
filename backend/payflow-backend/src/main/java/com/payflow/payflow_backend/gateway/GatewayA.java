@@ -41,4 +41,19 @@ public class GatewayA implements PaymentGateway {
                 getName(),
                 "Payment processed successfully by Gateway A");
     }
+
+    @Override
+    public GatewayResult refundPayment(Transaction transaction) {
+
+        /*
+         * Simulated refund.
+         *
+         * In a real implementation, this would call
+         * Gateway A's refund API using the original
+         * payment/transaction reference.
+         */
+        return GatewayResult.success(
+                getName(),
+                "Refund processed successfully by Gateway A");
+    }
 }

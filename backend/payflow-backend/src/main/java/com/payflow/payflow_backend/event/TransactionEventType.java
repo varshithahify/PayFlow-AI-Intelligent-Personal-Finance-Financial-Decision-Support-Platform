@@ -8,5 +8,7 @@ public enum TransactionEventType {
 
     SUCCESS,
 
-    FAILED
+    FAILED,
+
+    REFUNDED
 }

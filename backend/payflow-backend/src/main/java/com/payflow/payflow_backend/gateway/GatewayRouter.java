@@ -52,6 +52,19 @@ public class GatewayRouter {
         return supportedGateways;
     }
 
+    public PaymentGateway getGatewayByName(
+            String gatewayName) {
+
+        return gateways.stream()
+                .filter(gateway ->
+                        gateway.getName().equalsIgnoreCase(gatewayName))
+                .findFirst()
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Payment gateway not found: "
+                                        + gatewayName));
+    }
+
     private double getGatewayHealthScore(
             PaymentGateway gateway) {
 
