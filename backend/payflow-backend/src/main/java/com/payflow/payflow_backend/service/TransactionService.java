@@ -67,7 +67,8 @@ public class TransactionService {
         }
 
         var existingTransaction =
-                transactionRepository.findByUserIdAndIdempotencyKey(
+                transactionRepository.findByOrgIdAndUserIdAndIdempotencyKey(
+                        user.getOrgId(),
                         user.getId(),
                         normalizedKey);
 
@@ -109,9 +110,9 @@ public class TransactionService {
 
         return existing.getAmount().compareTo(request.getAmount()) == 0
                 && existing.getCurrency()
-                        .equalsIgnoreCase(request.getCurrency())
+                .equalsIgnoreCase(request.getCurrency())
                 && existing.getPaymentMethod()
-                        .equalsIgnoreCase(request.getPaymentMethod());
+                .equalsIgnoreCase(request.getPaymentMethod());
     }
 
     public List<TransactionResponse> getUserTransactions(
@@ -124,7 +125,9 @@ public class TransactionService {
         }
 
         return transactionRepository
-                .findByUserIdOrderByCreatedAtDesc(user.getId())
+                .findByOrgIdAndUserIdOrderByCreatedAtDesc(
+                        user.getOrgId(),
+                        user.getId())
                 .stream()
                 .map(TransactionResponse::new)
                 .toList();

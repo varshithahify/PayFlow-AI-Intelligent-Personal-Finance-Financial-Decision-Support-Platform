@@ -83,6 +83,9 @@ class TransactionServiceTest {
     @Test
     void shouldReturnExistingTransactionForSameIdempotencyKey() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction existing = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -94,7 +97,8 @@ class TransactionServiceTest {
         when(userRepository.findByEmail(EMAIL))
                 .thenReturn(user);
 
-        when(transactionRepository.findByUserIdAndIdempotencyKey(
+        when(transactionRepository.findByOrgIdAndUserIdAndIdempotencyKey(
+                ORG_ID,
                 USER_ID,
                 "idem-123"
         )).thenReturn(Optional.of(existing));
@@ -118,6 +122,9 @@ class TransactionServiceTest {
     @Test
     void shouldRejectSameIdempotencyKeyForDifferentRequest() {
 
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
         Transaction existing = createTransaction(
                 TRANSACTION_ID,
                 TransactionStatus.CREATED,
@@ -134,7 +141,8 @@ class TransactionServiceTest {
         when(userRepository.findByEmail(EMAIL))
                 .thenReturn(user);
 
-        when(transactionRepository.findByUserIdAndIdempotencyKey(
+        when(transactionRepository.findByOrgIdAndUserIdAndIdempotencyKey(
+                ORG_ID,
                 USER_ID,
                 "idem-123"
         )).thenReturn(Optional.of(existing));
