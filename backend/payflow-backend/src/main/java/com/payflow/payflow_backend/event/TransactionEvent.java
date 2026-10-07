@@ -14,6 +14,8 @@ public class TransactionEvent {
 
     private Long userId;
 
+    private Long orgId;
+
     private BigDecimal amount;
 
     private String currency;
@@ -32,6 +34,7 @@ public class TransactionEvent {
     public TransactionEvent(
             Long transactionId,
             Long userId,
+            Long orgId,
             BigDecimal amount,
             String currency,
             String paymentMethod,
@@ -42,6 +45,7 @@ public class TransactionEvent {
         this.eventId = UUID.randomUUID();
         this.transactionId = transactionId;
         this.userId = userId;
+        this.orgId = orgId;
         this.amount = amount;
         this.currency = currency;
         this.paymentMethod = paymentMethod;
@@ -72,6 +76,14 @@ public class TransactionEvent {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getOrgId() {
+        return orgId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public BigDecimal getAmount() {

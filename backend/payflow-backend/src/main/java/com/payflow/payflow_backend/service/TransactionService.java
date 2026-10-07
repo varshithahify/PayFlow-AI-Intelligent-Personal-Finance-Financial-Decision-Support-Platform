@@ -91,8 +91,7 @@ public class TransactionService {
                 TransactionStatus.CREATED,
                 user.getId(),
                 user.getOrgId(),
-                normalizedKey
-        );
+                normalizedKey);
 
         Transaction savedTransaction =
                 transactionRepository.save(transaction);
@@ -152,7 +151,6 @@ public class TransactionService {
                         id);
 
         if (cachedTransaction != null) {
-
             return new TransactionResponse(cachedTransaction);
         }
 
@@ -359,13 +357,13 @@ public class TransactionService {
                 new TransactionEvent(
                         transaction.getId(),
                         transaction.getUserId(),
+                        transaction.getOrgId(),
                         transaction.getAmount(),
                         transaction.getCurrency(),
                         transaction.getPaymentMethod(),
                         transaction.getStatus(),
                         eventType,
-                        LocalDateTime.now()
-                );
+                        LocalDateTime.now());
 
         transactionEventProducer.publish(event);
     }
