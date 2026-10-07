@@ -9,6 +9,7 @@ import com.payflow.payflow_backend.event.TransactionEvent;
 import com.payflow.payflow_backend.event.TransactionEventProducer;
 import com.payflow.payflow_backend.event.TransactionEventType;
 import com.payflow.payflow_backend.exception.ResourceNotFoundException;
+import com.payflow.payflow_backend.gateway.GatewayHealthService;
 import com.payflow.payflow_backend.gateway.GatewayResult;
 import com.payflow.payflow_backend.gateway.GatewayRouter;
 import com.payflow.payflow_backend.gateway.PaymentGateway;
@@ -26,6 +27,7 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final GatewayRouter gatewayRouter;
+    private final GatewayHealthService gatewayHealthService;
     private final TransactionEventProducer transactionEventProducer;
     private final TransactionCacheService transactionCacheService;
 
@@ -33,12 +35,14 @@ public class TransactionService {
             TransactionRepository transactionRepository,
             UserRepository userRepository,
             GatewayRouter gatewayRouter,
+            GatewayHealthService gatewayHealthService,
             TransactionEventProducer transactionEventProducer,
             TransactionCacheService transactionCacheService) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
         this.gatewayRouter = gatewayRouter;
+        this.gatewayHealthService = gatewayHealthService;
         this.transactionEventProducer =
                 transactionEventProducer;
         this.transactionCacheService =
@@ -205,10 +209,23 @@ public class TransactionService {
 
         for (PaymentGateway gateway : gateways) {
 
+            long startTime =
+                    System.currentTimeMillis();
+
             GatewayResult result =
                     gateway.processPayment(transaction);
 
+            int latencyMs =
+                    (int) (System.currentTimeMillis()
+                            - startTime);
+
+            gatewayHealthService.recordResult(
+                    result.getGatewayName(),
+                    result.isSuccess(),
+                    latencyMs);
+
             if (result.isSuccess()) {
+
                 successfulResult = result;
                 break;
             }
