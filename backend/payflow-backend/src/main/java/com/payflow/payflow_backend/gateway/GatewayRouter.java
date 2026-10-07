@@ -3,6 +3,7 @@ package com.payflow.payflow_backend.gateway;
 import com.payflow.payflow_backend.entity.Transaction;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -25,41 +26,36 @@ public class GatewayRouter {
                 .stream()
                 .findFirst()
                 .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "No healthy payment gateway supports payment method: "
-                                        + transaction.getPaymentMethod()));
+                        new IllegalStateException(
+                                "No supported payment gateway available"));
     }
 
     public List<PaymentGateway> routeAll(
             Transaction transaction) {
 
-        List<PaymentGateway> supportedAndHealthyGateways =
+        List<PaymentGateway> supportedGateways =
                 gateways.stream()
                         .filter(gateway ->
                                 gateway.supports(
                                         transaction.getPaymentMethod()))
-                        .filter(this::isGatewayHealthy)
+                        .sorted(
+                                Comparator.comparingDouble(
+                                        this::getGatewayHealthScore)
+                                        .reversed())
                         .toList();
 
-        if (supportedAndHealthyGateways.isEmpty()) {
-
+        if (supportedGateways.isEmpty()) {
             throw new IllegalArgumentException(
-                    "No healthy payment gateway supports payment method: "
-                            + transaction.getPaymentMethod());
+                    "No supported payment gateway available");
         }
 
-        return supportedAndHealthyGateways;
+        return supportedGateways;
     }
 
-    private boolean isGatewayHealthy(
+    private double getGatewayHealthScore(
             PaymentGateway gateway) {
 
-        String gatewayName =
-                gateway.getClass()
-                        .getSimpleName()
-                        .replace("Gateway", "");
-
-        return gatewayHealthService.isHealthy(
-                gatewayName);
+        return gatewayHealthService.getHealthScore(
+                gateway.getName());
     }
 }

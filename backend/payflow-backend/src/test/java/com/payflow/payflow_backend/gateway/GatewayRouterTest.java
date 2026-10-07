@@ -36,7 +36,7 @@ class GatewayRouterTest {
     }
 
     @Test
-    void shouldIncludeHealthyGateway() {
+    void shouldIncludeSupportedGateway() {
 
         Transaction transaction =
                 mock(Transaction.class);
@@ -44,8 +44,8 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("UPI");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(0.90);
 
         List<PaymentGateway> result =
                 gatewayRouter.routeAll(transaction);
@@ -55,7 +55,7 @@ class GatewayRouterTest {
     }
 
     @Test
-    void shouldSkipUnhealthyGateway() {
+    void shouldOrderSupportedGatewaysByHealthScore() {
 
         Transaction transaction =
                 mock(Transaction.class);
@@ -63,17 +63,41 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("CARD");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(false);
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(0.20);
 
-        when(gatewayHealthService.isHealthy("B"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_B"))
+                .thenReturn(0.90);
 
         List<PaymentGateway> result =
                 gatewayRouter.routeAll(transaction);
 
-        assertEquals(1, result.size());
+        assertEquals(2, result.size());
         assertEquals(gatewayB, result.get(0));
+        assertEquals(gatewayA, result.get(1));
+    }
+
+    @Test
+    void shouldIncludeGatewayWithLowHealthScoreForFailover() {
+
+        Transaction transaction =
+                mock(Transaction.class);
+
+        when(transaction.getPaymentMethod())
+                .thenReturn("CARD");
+
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(0.10);
+
+        when(gatewayHealthService.getHealthScore("GATEWAY_B"))
+                .thenReturn(0.90);
+
+        List<PaymentGateway> result =
+                gatewayRouter.routeAll(transaction);
+
+        assertEquals(2, result.size());
+        assertEquals(gatewayB, result.get(0));
+        assertEquals(gatewayA, result.get(1));
     }
 
     @Test
@@ -85,18 +109,16 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("CARD");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(1.0);
 
-        when(gatewayHealthService.isHealthy("B"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_B"))
+                .thenReturn(1.0);
 
         List<PaymentGateway> result =
                 gatewayRouter.routeAll(transaction);
 
         assertEquals(2, result.size());
-        assertEquals(gatewayA, result.get(0));
-        assertEquals(gatewayB, result.get(1));
     }
 
     @Test
@@ -108,12 +130,6 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("NETBANKING");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(true);
-
-        when(gatewayHealthService.isHealthy("B"))
-                .thenReturn(true);
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> gatewayRouter.routeAll(transaction)
@@ -121,7 +137,7 @@ class GatewayRouterTest {
     }
 
     @Test
-    void shouldPreserveGatewayOrderForFailover() {
+    void shouldOrderGatewaysByHealthScore() {
 
         Transaction transaction =
                 mock(Transaction.class);
@@ -129,22 +145,22 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("CARD");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(0.70);
 
-        when(gatewayHealthService.isHealthy("B"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_B"))
+                .thenReturn(0.95);
 
         List<PaymentGateway> result =
                 gatewayRouter.routeAll(transaction);
 
         assertEquals(2, result.size());
-        assertEquals(gatewayA, result.get(0));
-        assertEquals(gatewayB, result.get(1));
+        assertEquals(gatewayB, result.get(0));
+        assertEquals(gatewayA, result.get(1));
     }
 
     @Test
-    void routeShouldReturnFirstHealthySupportedGateway() {
+    void routeShouldReturnHighestScoredSupportedGateway() {
 
         Transaction transaction =
                 mock(Transaction.class);
@@ -152,15 +168,17 @@ class GatewayRouterTest {
         when(transaction.getPaymentMethod())
                 .thenReturn("CARD");
 
-        when(gatewayHealthService.isHealthy("A"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_A"))
+                .thenReturn(0.70);
 
-        when(gatewayHealthService.isHealthy("B"))
-                .thenReturn(true);
+        when(gatewayHealthService.getHealthScore("GATEWAY_B"))
+                .thenReturn(0.95);
 
         PaymentGateway result =
                 gatewayRouter.route(transaction);
 
-        assertEquals(gatewayA, result);
+        assertEquals(
+                gatewayB,
+                result);
     }
 }
