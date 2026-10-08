@@ -22,12 +22,14 @@ public class ProcessedEventService {
     @Transactional
     public boolean tryMarkAsProcessed(
             UUID eventId,
-            String eventType) {
+            String eventType,
+            Long orgId) {
 
         int insertedRows =
                 processedEventRepository.insertIfNotExists(
                         eventId,
                         eventType,
+                        orgId,
                         LocalDateTime.now());
 
         return insertedRows == 1;

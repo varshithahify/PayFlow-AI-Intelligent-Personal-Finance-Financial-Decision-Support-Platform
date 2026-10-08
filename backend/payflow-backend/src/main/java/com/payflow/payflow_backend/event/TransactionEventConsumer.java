@@ -12,8 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransactionEventConsumer {
 
     private static final Logger logger =
-            LoggerFactory.getLogger(
-                    TransactionEventConsumer.class);
+            LoggerFactory.getLogger(TransactionEventConsumer.class);
 
     private static final String TRANSACTION_EVENTS_TOPIC =
             "transaction-events";
@@ -22,18 +21,13 @@ public class TransactionEventConsumer {
             "payflow-group";
 
     private final ReconciliationService reconciliationService;
-
     private final ProcessedEventService processedEventService;
 
     public TransactionEventConsumer(
             ReconciliationService reconciliationService,
             ProcessedEventService processedEventService) {
-
-        this.reconciliationService =
-                reconciliationService;
-
-        this.processedEventService =
-                processedEventService;
+        this.reconciliationService = reconciliationService;
+        this.processedEventService = processedEventService;
     }
 
     @Transactional
@@ -44,51 +38,45 @@ public class TransactionEventConsumer {
     public void consume(TransactionEvent event) {
 
         logger.info(
-                "Received transaction event: eventId={}, transactionId={}, eventType={}, status={}",
+                "Received transaction event: eventId={}, transactionId={}, eventType={}, status={}, orgId={}",
                 event.getEventId(),
                 event.getTransactionId(),
                 event.getEventType(),
-                event.getStatus()
+                event.getStatus(),
+                event.getOrgId()
         );
 
         boolean claimed =
                 processedEventService.tryMarkAsProcessed(
                         event.getEventId(),
-                        event.getEventType().name());
+                        event.getEventType().name(),
+                        event.getOrgId());
 
         if (!claimed) {
-
             logger.info(
                     "Skipping already processed event: eventId={}",
                     event.getEventId()
             );
-
             return;
         }
 
         switch (event.getEventType()) {
-
             case SUCCESS:
             case FAILED:
-
                 logger.info(
                         "Triggering reconciliation for transactionId={}",
                         event.getTransactionId()
                 );
-
                 reconciliationService.reconcileTransaction(
                         event.getTransactionId());
-
                 break;
 
             case CREATED:
             case PROCESSING:
-
                 logger.debug(
                         "No reconciliation required for eventType={}",
                         event.getEventType()
                 );
-
                 break;
         }
 

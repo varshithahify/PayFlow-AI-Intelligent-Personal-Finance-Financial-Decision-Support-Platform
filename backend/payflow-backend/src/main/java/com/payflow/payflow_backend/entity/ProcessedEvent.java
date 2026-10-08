@@ -33,6 +33,11 @@ public class ProcessedEvent {
     private String eventType;
 
     @Column(
+            name = "org_id",
+            nullable = false)
+    private Long orgId;
+
+    @Column(
             name = "processed_at",
             nullable = false)
     private LocalDateTime processedAt;
@@ -43,10 +48,12 @@ public class ProcessedEvent {
     public ProcessedEvent(
             UUID eventId,
             String eventType,
+            Long orgId,
             LocalDateTime processedAt) {
 
         this.eventId = eventId;
         this.eventType = eventType;
+        this.orgId = orgId;
         this.processedAt = processedAt;
     }
 
@@ -68,6 +75,14 @@ public class ProcessedEvent {
 
     public void setEventType(String eventType) {
         this.eventType = eventType;
+    }
+
+    public Long getOrgId() {
+        return orgId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public LocalDateTime getProcessedAt() {

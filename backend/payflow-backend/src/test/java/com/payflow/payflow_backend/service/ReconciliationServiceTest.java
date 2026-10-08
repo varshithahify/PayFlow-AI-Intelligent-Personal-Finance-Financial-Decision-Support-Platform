@@ -51,9 +51,11 @@ class ReconciliationServiceTest {
     void shouldReturnMatchedWhenRecordsMatch() {
 
         Long transactionId = 7L;
+        Long orgId = 1L;
 
         Transaction transaction = new Transaction();
         transaction.setId(transactionId);
+        transaction.setOrgId(orgId);
         transaction.setAmount(new BigDecimal("9999.00"));
         transaction.setCurrency("INR");
         transaction.setStatus(TransactionStatus.SUCCESS);
@@ -101,6 +103,10 @@ class ReconciliationServiceTest {
                 result.getTransactionId());
 
         assertEquals(
+                orgId,
+                result.getOrgId());
+
+        assertEquals(
                 new BigDecimal("9999.00"),
                 result.getInternalAmount());
 
@@ -116,6 +122,7 @@ class ReconciliationServiceTest {
                         any(),
                         any(),
                         any(),
+                        any(),
                         any());
     }
 
@@ -123,9 +130,11 @@ class ReconciliationServiceTest {
     void shouldReturnMismatchWhenAmountDoesNotMatch() {
 
         Long transactionId = 7L;
+        Long orgId = 1L;
 
         Transaction transaction = new Transaction();
         transaction.setId(transactionId);
+        transaction.setOrgId(orgId);
         transaction.setAmount(new BigDecimal("9999.00"));
         transaction.setCurrency("INR");
         transaction.setStatus(TransactionStatus.SUCCESS);
@@ -174,12 +183,17 @@ class ReconciliationServiceTest {
                 result.getStatus());
 
         assertEquals(
+                orgId,
+                result.getOrgId());
+
+        assertEquals(
                 "Amount mismatch.",
                 result.getMismatchReason());
 
         verify(investigationService)
                 .createInvestigation(
                         eq(transactionId),
+                        eq(orgId),
                         anyLong(),
                         eq(InvestigationPriority.HIGH),
                         eq(InvestigationIssueType.AMOUNT_MISMATCH),
@@ -190,9 +204,11 @@ class ReconciliationServiceTest {
     void shouldReturnMissingExternalWhenExternalRecordDoesNotExist() {
 
         Long transactionId = 7L;
+        Long orgId = 1L;
 
         Transaction transaction = new Transaction();
         transaction.setId(transactionId);
+        transaction.setOrgId(orgId);
         transaction.setAmount(new BigDecimal("9999.00"));
         transaction.setCurrency("INR");
         transaction.setStatus(TransactionStatus.SUCCESS);
@@ -234,6 +250,10 @@ class ReconciliationServiceTest {
                 result.getTransactionId());
 
         assertEquals(
+                orgId,
+                result.getOrgId());
+
+        assertEquals(
                 new BigDecimal("9999.00"),
                 result.getInternalAmount());
 
@@ -246,6 +266,7 @@ class ReconciliationServiceTest {
         verify(investigationService)
                 .createInvestigation(
                         eq(transactionId),
+                        eq(orgId),
                         anyLong(),
                         eq(InvestigationPriority.HIGH),
                         eq(InvestigationIssueType.MISSING_EXTERNAL),
@@ -300,6 +321,8 @@ class ReconciliationServiceTest {
 
         assertNull(result.getTransactionId());
 
+        assertNull(result.getOrgId());
+
         assertEquals(
                 externalRecordId,
                 result.getExternalRecordId());
@@ -314,6 +337,7 @@ class ReconciliationServiceTest {
 
         verify(investigationService)
                 .createInvestigation(
+                        isNull(),
                         isNull(),
                         anyLong(),
                         eq(InvestigationPriority.HIGH),

@@ -75,6 +75,9 @@ public class ReconciliationService {
             record.setTransactionId(
                     transaction.getId());
 
+            record.setOrgId(
+                    transaction.getOrgId());
+
             record.setStatus(
                     ReconciliationStatus.MISSING_EXTERNAL);
 
@@ -158,6 +161,9 @@ public class ReconciliationService {
 
         record.setTransactionId(
                 transaction.getId());
+
+        record.setOrgId(
+                transaction.getOrgId());
 
         record.setExternalRecordId(
                 externalRecord.getId());
@@ -272,8 +278,7 @@ public class ReconciliationService {
         Optional<Investigation> existingInvestigation =
                 investigationRepository
                         .findTopByTransactionIdOrderByCreatedAtDesc(
-                                reconciliationRecord
-                                        .getTransactionId());
+                                reconciliationRecord.getTransactionId());
 
         if (existingInvestigation.isPresent()) {
 
@@ -301,6 +306,7 @@ public class ReconciliationService {
 
         investigationService.createInvestigation(
                 reconciliationRecord.getTransactionId(),
+                reconciliationRecord.getOrgId(),
                 reconciliationRecord.getId(),
                 InvestigationPriority.HIGH,
                 issueType,

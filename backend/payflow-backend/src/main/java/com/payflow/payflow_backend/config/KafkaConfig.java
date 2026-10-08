@@ -4,6 +4,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -27,11 +28,17 @@ import java.util.Map;
 @EnableKafka
 public class KafkaConfig {
 
-    private static final String BOOTSTRAP_SERVERS =
-            "localhost:9092";
+    private final String bootstrapServers;
 
     private static final String CONSUMER_GROUP =
             "payflow-group";
+
+    public KafkaConfig(
+            @Value("${spring.kafka.bootstrap-servers}")
+            String bootstrapServers) {
+
+        this.bootstrapServers = bootstrapServers;
+    }
 
     // -------------------------
     // Producer Configuration
@@ -45,7 +52,7 @@ public class KafkaConfig {
 
         config.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                BOOTSTRAP_SERVERS);
+                bootstrapServers);
 
         config.put(
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
@@ -77,7 +84,7 @@ public class KafkaConfig {
 
         config.put(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                BOOTSTRAP_SERVERS);
+                bootstrapServers);
 
         config.put(
                 ConsumerConfig.GROUP_ID_CONFIG,

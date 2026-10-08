@@ -20,11 +20,13 @@ public interface ProcessedEventRepository
                     INSERT INTO processed_events (
                         event_id,
                         event_type,
+                        org_id,
                         processed_at
                     )
                     VALUES (
                         :eventId,
                         :eventType,
+                        :orgId,
                         :processedAt
                     )
                     ON CONFLICT (event_id) DO NOTHING
@@ -34,5 +36,6 @@ public interface ProcessedEventRepository
     int insertIfNotExists(
             @Param("eventId") UUID eventId,
             @Param("eventType") String eventType,
+            @Param("orgId") Long orgId,
             @Param("processedAt") LocalDateTime processedAt);
 }

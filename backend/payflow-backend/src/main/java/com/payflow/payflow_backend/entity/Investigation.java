@@ -14,6 +14,9 @@ public class Investigation {
     @Column(name = "transaction_id")
     private Long transactionId;
 
+    @Column(name = "org_id", nullable = false)
+    private Long orgId;
+
     @Column(name = "reconciliation_record_id")
     private Long reconciliationRecordId;
 
@@ -58,6 +61,14 @@ public class Investigation {
 
     public void setTransactionId(Long transactionId) {
         this.transactionId = transactionId;
+    }
+
+    public Long getOrgId() {
+        return orgId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public Long getReconciliationRecordId() {

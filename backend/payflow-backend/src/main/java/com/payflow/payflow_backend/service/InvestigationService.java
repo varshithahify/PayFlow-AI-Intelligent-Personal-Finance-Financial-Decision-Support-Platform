@@ -4,7 +4,9 @@ import com.payflow.payflow_backend.entity.Investigation;
 import com.payflow.payflow_backend.entity.InvestigationIssueType;
 import com.payflow.payflow_backend.entity.InvestigationPriority;
 import com.payflow.payflow_backend.entity.InvestigationStatus;
+import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.repository.InvestigationRepository;
+import com.payflow.payflow_backend.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,11 +17,14 @@ import java.util.List;
 public class InvestigationService {
 
     private final InvestigationRepository investigationRepository;
+    private final TransactionRepository transactionRepository;
 
     public InvestigationService(
-            InvestigationRepository investigationRepository) {
+            InvestigationRepository investigationRepository,
+            TransactionRepository transactionRepository) {
 
         this.investigationRepository = investigationRepository;
+        this.transactionRepository = transactionRepository;
     }
 
     @Transactional
@@ -30,9 +35,35 @@ public class InvestigationService {
             InvestigationIssueType issueType,
             String summary) {
 
+        Transaction transaction =
+                transactionRepository.findById(transactionId)
+                        .orElseThrow(() ->
+                                new IllegalArgumentException(
+                                        "Transaction not found: "
+                                                + transactionId));
+
+        return createInvestigation(
+                transactionId,
+                transaction.getOrgId(),
+                reconciliationRecordId,
+                priority,
+                issueType,
+                summary);
+    }
+
+    @Transactional
+    public Investigation createInvestigation(
+            Long transactionId,
+            Long orgId,
+            Long reconciliationRecordId,
+            InvestigationPriority priority,
+            InvestigationIssueType issueType,
+            String summary) {
+
         Investigation investigation = new Investigation();
 
         investigation.setTransactionId(transactionId);
+        investigation.setOrgId(orgId);
         investigation.setReconciliationRecordId(
                 reconciliationRecordId);
         investigation.setStatus(

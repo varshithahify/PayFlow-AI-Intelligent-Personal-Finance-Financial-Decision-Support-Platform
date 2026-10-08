@@ -1,5 +1,8 @@
 package com.payflow.payflow_backend.service;
 
+import com.payflow.payflow_backend.client.FraudServiceClient;
+import com.payflow.payflow_backend.dto.FraudScoreRequest;
+import com.payflow.payflow_backend.dto.FraudScoreResponse;
 import com.payflow.payflow_backend.dto.TransactionRequest;
 import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
@@ -30,6 +33,7 @@ public class TransactionService {
     private final GatewayHealthService gatewayHealthService;
     private final TransactionEventProducer transactionEventProducer;
     private final TransactionCacheService transactionCacheService;
+    private final FraudServiceClient fraudServiceClient;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -37,7 +41,8 @@ public class TransactionService {
             GatewayRouter gatewayRouter,
             GatewayHealthService gatewayHealthService,
             TransactionEventProducer transactionEventProducer,
-            TransactionCacheService transactionCacheService) {
+            TransactionCacheService transactionCacheService,
+            FraudServiceClient fraudServiceClient) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
@@ -45,6 +50,7 @@ public class TransactionService {
         this.gatewayHealthService = gatewayHealthService;
         this.transactionEventProducer = transactionEventProducer;
         this.transactionCacheService = transactionCacheService;
+        this.fraudServiceClient = fraudServiceClient;
     }
 
     @Transactional
@@ -78,7 +84,7 @@ public class TransactionService {
 
             if (!isSameRequest(existing, request)) {
                 throw new IllegalStateException(
-                        "Idempotency key already exists for a different transaction");
+                        "Idempotency key already existsfor a different transaction");
             }
 
             return new TransactionResponse(existing);
@@ -186,6 +192,58 @@ public class TransactionService {
                     "Only CREATED transactions can move to PROCESSING");
         }
 
+        /*
+         * Run fraud detection before any payment gateway
+         * is selected or called.
+         */
+        FraudScoreRequest fraudRequest = new FraudScoreRequest();
+
+        fraudRequest.setTransactionAmt(
+                transaction.getAmount().doubleValue());
+
+        /*
+         * The current transaction model does not contain
+         * card information. Use a stable user identifier
+         * for the current velocity check.
+         */
+        fraudRequest.setCardHash(
+                "user:" + transaction.getUserId());
+
+        fraudRequest.setEmail(email);
+
+        FraudScoreResponse fraudResponse =
+                fraudServiceClient.score(fraudRequest);
+
+        /*
+         * A BLOCK decision must prevent the payment gateway
+         * from processing the transaction.
+         *
+         * The current TransactionStatus enum does not have
+         * a BLOCKED/FRAUD status, so FAILED is used while
+         * preserving the existing state machine.
+         */
+        if ("BLOCK".equalsIgnoreCase(fraudResponse.getAction())) {
+
+            transaction.setStatus(TransactionStatus.FAILED);
+
+            Transaction updatedTransaction =
+                    transactionRepository.save(transaction);
+
+            transactionCacheService.evictTransaction(
+                    updatedTransaction.getUserId(),
+                    updatedTransaction.getId());
+
+            publishTransactionEvent(
+                    updatedTransaction,
+                    TransactionEventType.FAILED);
+
+            return new TransactionResponse(updatedTransaction);
+        }
+
+        /*
+         * Fraud decision is ALLOW or FLAG.
+         * Continue with the normal payment gateway flow.
+         */
         List<PaymentGateway> gateways =
                 gatewayRouter.routeAll(transaction);
 

@@ -15,6 +15,9 @@ public class ReconciliationRecord {
     @Column(name = "transaction_id")
     private Long transactionId;
 
+    @Column(name = "org_id", nullable = false)
+    private Long orgId;
+
     @Column(name = "external_record_id")
     private Long externalRecordId;
 
@@ -49,6 +52,10 @@ public class ReconciliationRecord {
 
     public Long getTransactionId() {
         return transactionId;
+    }
+
+    public Long getOrgId() {
+        return orgId;
     }
 
     public Long getExternalRecordId() {
@@ -89,6 +96,10 @@ public class ReconciliationRecord {
 
     public void setTransactionId(Long transactionId) {
         this.transactionId = transactionId;
+    }
+
+    public void setOrgId(Long orgId) {
+        this.orgId = orgId;
     }
 
     public void setExternalRecordId(Long externalRecordId) {
