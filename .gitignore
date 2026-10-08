@@ -34,3 +34,6 @@ Thumbs.db
 
 # Spring Boot local configuration
 application-local.properties
+
+payflow-fraud/dataset/
+
