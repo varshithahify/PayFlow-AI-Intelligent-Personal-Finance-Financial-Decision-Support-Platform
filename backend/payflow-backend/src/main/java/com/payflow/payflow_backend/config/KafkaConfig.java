@@ -1,10 +1,12 @@
 package com.payflow.payflow_backend.config;
 
+import com.payflow.payflow_backend.event.TransactionEvent;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 
@@ -25,9 +27,12 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
 import org.springframework.kafka.support.serializer.JacksonJsonSerializer;
+import org.springframework.kafka.support.serializer.DelegatingByTypeSerializer;
 import org.springframework.util.backoff.FixedBackOff;
 
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Configuration
@@ -38,9 +43,19 @@ public class KafkaConfig {
 
     private static final String CONSUMER_GROUP = "payflow-group";
 
+    private static final String TRANSACTION_EVENTS =
+            "transaction-events";
+
+    private static final String TRANSACTION_EVENTS_DLT =
+            "transaction-events-dlt";
+
+    private static final String TRANSACTION_EVENTS_DLT_FAILURE =
+            "transaction-events-dlt.DLT";
+
     public KafkaConfig(
             @Value("${spring.kafka.bootstrap-servers}")
             String bootstrapServers) {
+
         this.bootstrapServers = bootstrapServers;
     }
 
@@ -51,10 +66,12 @@ public class KafkaConfig {
     @Bean
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();
+
         configs.put(
                 AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
                 bootstrapServers
         );
+
         return new KafkaAdmin(configs);
     }
 
@@ -92,7 +109,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic transactionEventsTopic() {
-        return TopicBuilder.name("transaction-events")
+        return TopicBuilder.name(TRANSACTION_EVENTS)
                 .partitions(3)
                 .replicas(1)
                 .build();
@@ -100,14 +117,22 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic transactionEventsDltTopic() {
-        return TopicBuilder.name("transaction-events-dlt")
+        return TopicBuilder.name(TRANSACTION_EVENTS_DLT)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic transactionEventsDltFailureTopic() {
+        return TopicBuilder.name(TRANSACTION_EVENTS_DLT_FAILURE)
                 .partitions(3)
                 .replicas(1)
                 .build();
     }
 
     // -------------------------
-    // Producer Configuration
+    // Normal Event Producer
     // -------------------------
 
     @Bean
@@ -118,10 +143,12 @@ public class KafkaConfig {
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
                 bootstrapServers
         );
+
         config.put(
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
                 StringSerializer.class
         );
+
         config.put(
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
                 JacksonJsonSerializer.class
@@ -133,7 +160,66 @@ public class KafkaConfig {
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate(
             ProducerFactory<String, Object> producerFactory) {
+
         return new KafkaTemplate<>(producerFactory);
+    }
+
+    // -------------------------
+    // DLT Producer
+    // -------------------------
+
+   @Bean
+public ProducerFactory<String, Object> dltProducerFactory() {
+    Map<String, Object> config = new HashMap<>();
+
+    config.put(
+            ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
+            bootstrapServers
+    );
+
+    config.put(
+            ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
+            StringSerializer.class
+    );
+
+    config.put(
+            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
+            DelegatingByTypeSerializer.class
+    );
+
+    Map<Class<?>, org.apache.kafka.common.serialization.Serializer<?>>
+            serializers = new LinkedHashMap<>();
+
+    // Preserve raw byte[] payloads when forwarding failed records.
+    serializers.put(
+            byte[].class,
+            new ByteArraySerializer()
+    );
+
+    // Serialize normal Java objects, including TransactionEvent.
+    serializers.put(
+            Object.class,
+            new JacksonJsonSerializer<>()
+    );
+
+    DelegatingByTypeSerializer valueSerializer =
+            new DelegatingByTypeSerializer(
+                    serializers,
+                    true
+            );
+
+    return new DefaultKafkaProducerFactory<>(
+            config,
+            new StringSerializer(),
+            valueSerializer
+    );
+}
+
+    @Bean
+    public KafkaTemplate<String, Object> dltKafkaTemplate(
+            ProducerFactory<String, Object> dltProducerFactory) {
+
+        return new KafkaTemplate<>(dltProducerFactory);
     }
 
     // -------------------------
@@ -148,25 +234,40 @@ public class KafkaConfig {
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
                 bootstrapServers
         );
+
         config.put(
                 ConsumerConfig.GROUP_ID_CONFIG,
                 CONSUMER_GROUP
         );
+
         config.put(
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
                 StringDeserializer.class
         );
+
         config.put(
                 ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
                 ErrorHandlingDeserializer.class
         );
+
         config.put(
                 ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS,
                 JacksonJsonDeserializer.class.getName()
         );
+
         config.put(
                 JacksonJsonDeserializer.TRUSTED_PACKAGES,
                 "com.payflow.payflow_backend.event"
+        );
+
+        config.put(
+                JacksonJsonDeserializer.VALUE_DEFAULT_TYPE,
+                TransactionEvent.class.getName()
+        );
+
+        config.put(
+                JacksonJsonDeserializer.USE_TYPE_INFO_HEADERS,
+                false
         );
 
         return new DefaultKafkaConsumerFactory<>(config);
@@ -178,25 +279,47 @@ public class KafkaConfig {
 
     @Bean
     public DeadLetterPublishingRecoverer deadLetterPublishingRecoverer(
-            KafkaTemplate<String, Object> kafkaTemplate) {
+            KafkaTemplate<String, Object> dltKafkaTemplate) {
 
-        return new DeadLetterPublishingRecoverer(
-                kafkaTemplate,
-                (record, exception) -> {
-                    String destinationTopic;
+        DeadLetterPublishingRecoverer recoverer =
+                new DeadLetterPublishingRecoverer(
+                        dltKafkaTemplate,
+                        (record, exception) -> resolveDltDestination(
+                                record.topic(),
+                                record.partition()
+                        )
+                );
 
-                    if ("transaction-events".equals(record.topic())) {
-                        destinationTopic = "transaction-events-dlt";
-                    } else {
-                        destinationTopic = record.topic() + ".DLT";
-                    }
+        recoverer.setFailIfSendResultIsError(true);
 
-                    return new TopicPartition(
-                            destinationTopic,
-                            record.partition()
-                    );
-                }
+        recoverer.setWaitForSendResultTimeout(
+                Duration.ofSeconds(10)
         );
+
+        return recoverer;
+    }
+
+    // -------------------------
+    // DLT Destination Routing
+    // -------------------------
+
+    TopicPartition resolveDltDestination(
+            String sourceTopic,
+            int partition) {
+
+        String destinationTopic;
+
+        if (TRANSACTION_EVENTS.equals(sourceTopic)) {
+            destinationTopic = TRANSACTION_EVENTS_DLT;
+
+        } else if (TRANSACTION_EVENTS_DLT.equals(sourceTopic)) {
+            destinationTopic = TRANSACTION_EVENTS_DLT_FAILURE;
+
+        } else {
+            destinationTopic = sourceTopic + ".DLT";
+        }
+
+        return new TopicPartition(destinationTopic, partition);
     }
 
     // -------------------------

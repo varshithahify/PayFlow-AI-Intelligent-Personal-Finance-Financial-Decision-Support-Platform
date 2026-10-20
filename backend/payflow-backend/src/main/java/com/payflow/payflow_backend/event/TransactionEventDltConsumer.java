@@ -1,6 +1,6 @@
 package com.payflow.payflow_backend.event;
 
-import com.payflow.payflow_backend.service.ReconciliationService;
+import com.payflow.payflow_backend.service.FailedEventRecoveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -11,7 +11,8 @@ public class TransactionEventDltConsumer {
 
     private static final Logger logger =
             LoggerFactory.getLogger(
-                    TransactionEventDltConsumer.class);
+                    TransactionEventDltConsumer.class
+            );
 
     private static final String DLT_TOPIC =
             "transaction-events-dlt";
@@ -19,13 +20,13 @@ public class TransactionEventDltConsumer {
     private static final String DLT_CONSUMER_GROUP =
             "payflow-dlt-group";
 
-    private final ReconciliationService reconciliationService;
+    private final FailedEventRecoveryService failedEventRecoveryService;
 
     public TransactionEventDltConsumer(
-            ReconciliationService reconciliationService) {
+            FailedEventRecoveryService failedEventRecoveryService) {
 
-        this.reconciliationService =
-                reconciliationService;
+        this.failedEventRecoveryService =
+                failedEventRecoveryService;
     }
 
     @KafkaListener(
@@ -34,8 +35,15 @@ public class TransactionEventDltConsumer {
     )
     public void consume(TransactionEvent event) {
 
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "DLT transaction event must not be null"
+            );
+        }
+
         logger.error(
-                "DLT EVENT RECEIVED: eventId={}, transactionId={}, eventType={}, status={}, amount={}, currency={}",
+                "DLT EVENT RECEIVED: eventId={}, transactionId={}, "
+                        + "eventType={}, status={}, amount={}, currency={}",
                 event.getEventId(),
                 event.getTransactionId(),
                 event.getEventType(),
@@ -44,17 +52,30 @@ public class TransactionEventDltConsumer {
                 event.getCurrency()
         );
 
-        logger.error(
-                "Failed transaction event requires investigation: transactionId={}",
-                event.getTransactionId()
-        );
+        String failureReason =
+                "Transaction event exhausted its configured retries "
+                        + "and reached the dead-letter topic.";
 
-        reconciliationService.reconcileTransaction(
-                event.getTransactionId());
+        boolean recorded =
+                failedEventRecoveryService.recordFailedEvent(
+                        event,
+                        failureReason
+                );
 
-        logger.info(
-                "DLT event reconciliation completed: transactionId={}",
-                event.getTransactionId()
-        );
+        if (recorded) {
+            logger.error(
+                    "Failed event recorded for investigation: "
+                            + "eventId={}, transactionId={}",
+                    event.getEventId(),
+                    event.getTransactionId()
+            );
+        } else {
+            logger.info(
+                    "Duplicate DLT event already recorded: "
+                            + "eventId={}, transactionId={}",
+                    event.getEventId(),
+                    event.getTransactionId()
+            );
+        }
     }
 }

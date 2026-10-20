@@ -10,5 +10,7 @@ public enum InvestigationIssueType {
 
     MISSING_EXTERNAL,
 
-    MISSING_INTERNAL
+    MISSING_INTERNAL,
+
+    PROCESSING_FAILURE
 }
