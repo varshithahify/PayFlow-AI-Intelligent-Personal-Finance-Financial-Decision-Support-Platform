@@ -8,6 +8,7 @@ import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
+import com.payflow.payflow_backend.event.FraudAlertProducer;
 import com.payflow.payflow_backend.event.TransactionEvent;
 import com.payflow.payflow_backend.event.TransactionEventProducer;
 import com.payflow.payflow_backend.event.TransactionEventType;
@@ -58,6 +59,9 @@ class TransactionServiceTest {
     private FraudServiceClient fraudServiceClient;
 
     @Mock
+    private FraudAlertProducer fraudAlertProducer;
+
+    @Mock
     private PaymentGateway gatewayA;
 
     @Mock
@@ -101,7 +105,8 @@ class TransactionServiceTest {
                 gatewayHealthService,
                 transactionEventProducer,
                 transactionCacheService,
-                fraudServiceClient
+                fraudServiceClient,
+                fraudAlertProducer
         );
     }
 

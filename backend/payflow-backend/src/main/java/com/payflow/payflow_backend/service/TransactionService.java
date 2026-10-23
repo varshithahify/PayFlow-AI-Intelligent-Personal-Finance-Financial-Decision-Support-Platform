@@ -8,6 +8,8 @@ import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
+import com.payflow.payflow_backend.event.FraudAlertEvent;
+import com.payflow.payflow_backend.event.FraudAlertProducer;
 import com.payflow.payflow_backend.event.TransactionEvent;
 import com.payflow.payflow_backend.event.TransactionEventProducer;
 import com.payflow.payflow_backend.event.TransactionEventType;
@@ -23,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class TransactionService {
@@ -34,6 +37,7 @@ public class TransactionService {
     private final TransactionEventProducer transactionEventProducer;
     private final TransactionCacheService transactionCacheService;
     private final FraudServiceClient fraudServiceClient;
+    private final FraudAlertProducer fraudAlertProducer;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -42,7 +46,8 @@ public class TransactionService {
             GatewayHealthService gatewayHealthService,
             TransactionEventProducer transactionEventProducer,
             TransactionCacheService transactionCacheService,
-            FraudServiceClient fraudServiceClient) {
+            FraudServiceClient fraudServiceClient,
+            FraudAlertProducer fraudAlertProducer) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
@@ -51,6 +56,7 @@ public class TransactionService {
         this.transactionEventProducer = transactionEventProducer;
         this.transactionCacheService = transactionCacheService;
         this.fraudServiceClient = fraudServiceClient;
+        this.fraudAlertProducer = fraudAlertProducer;
     }
 
     @Transactional
@@ -84,7 +90,7 @@ public class TransactionService {
 
             if (!isSameRequest(existing, request)) {
                 throw new IllegalStateException(
-                        "Idempotency key already existsfor a different transaction");
+                        "Idempotency key already exists for a different transaction");
             }
 
             return new TransactionResponse(existing);
@@ -148,9 +154,6 @@ public class TransactionService {
             throw new ResourceNotFoundException("User not found");
         }
 
-        /*
-         * Check Redis first.
-         */
         Transaction cachedTransaction =
                 transactionCacheService.getCachedTransaction(
                         user.getId(),
@@ -160,17 +163,9 @@ public class TransactionService {
             return new TransactionResponse(cachedTransaction);
         }
 
-        /*
-         * Cache miss:
-         * load the transaction from PostgreSQL
-         * and verify ownership.
-         */
         Transaction transaction =
                 getOwnedTransaction(id, email);
 
-        /*
-         * Cache the verified transaction.
-         */
         transactionCacheService.cacheTransaction(
                 user.getId(),
                 transaction.getId(),
@@ -193,8 +188,8 @@ public class TransactionService {
         }
 
         /*
-         * Run fraud detection before any payment gateway
-         * is selected or called.
+         * Run fraud detection before selecting or calling
+         * any payment gateway.
          */
         FraudScoreRequest fraudRequest = new FraudScoreRequest();
 
@@ -203,7 +198,7 @@ public class TransactionService {
 
         /*
          * The current transaction model does not contain
-         * card information. Use a stable user identifier
+         * card information, so use a stable user identifier
          * for the current velocity check.
          */
         fraudRequest.setCardHash(
@@ -214,13 +209,21 @@ public class TransactionService {
         FraudScoreResponse fraudResponse =
                 fraudServiceClient.score(fraudRequest);
 
+        if (fraudResponse == null) {
+            throw new IllegalStateException(
+                    "Fraud service returned an empty response");
+        }
+
         /*
-         * A BLOCK decision must prevent the payment gateway
-         * from processing the transaction.
-         *
-         * The current TransactionStatus enum does not have
-         * a BLOCKED/FRAUD status, so FAILED is used while
-         * preserving the existing state machine.
+         * Publish an alert only for FLAG and BLOCK decisions.
+         * ALLOW decisions continue without a fraud alert.
+         */
+        publishFraudAlertIfNeeded(transaction, fraudResponse);
+
+        /*
+         * BLOCK prevents the payment gateway from processing
+         * the transaction. FAILED is used because the current
+         * TransactionStatus enum has no BLOCKED status.
          */
         if ("BLOCK".equalsIgnoreCase(fraudResponse.getAction())) {
 
@@ -241,8 +244,8 @@ public class TransactionService {
         }
 
         /*
-         * Fraud decision is ALLOW or FLAG.
-         * Continue with the normal payment gateway flow.
+         * ALLOW and FLAG continue through the normal
+         * payment gateway flow.
          */
         List<PaymentGateway> gateways =
                 gatewayRouter.routeAll(transaction);
@@ -251,10 +254,6 @@ public class TransactionService {
 
         transactionRepository.save(transaction);
 
-        /*
-         * The database now contains PROCESSING.
-         * Remove the old Redis value.
-         */
         transactionCacheService.evictTransaction(
                 transaction.getUserId(),
                 transaction.getId());
@@ -267,15 +266,13 @@ public class TransactionService {
 
         for (PaymentGateway gateway : gateways) {
 
-            long startTime =
-                    System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             GatewayResult result =
                     gateway.processPayment(transaction);
 
             int latencyMs =
-                    (int) (System.currentTimeMillis()
-                            - startTime);
+                    (int) (System.currentTimeMillis() - startTime);
 
             gatewayHealthService.recordResult(
                     result.getGatewayName(),
@@ -283,7 +280,6 @@ public class TransactionService {
                     latencyMs);
 
             if (result.isSuccess()) {
-
                 successfulResult = result;
                 break;
             }
@@ -295,10 +291,7 @@ public class TransactionService {
 
             /*
              * Store the gateway that actually processed
-             * the successful payment.
-             *
-             * This is required later so that refunds are
-             * sent to the same gateway.
+             * the successful payment. Refunds use this gateway.
              */
             transaction.setGatewayName(
                     successfulResult.getGatewayName());
@@ -311,11 +304,6 @@ public class TransactionService {
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
-        /*
-         * The final status changed again.
-         * Remove Redis so the next GET loads the latest
-         * value from PostgreSQL.
-         */
         transactionCacheService.evictTransaction(
                 updatedTransaction.getUserId(),
                 updatedTransaction.getId());
@@ -337,6 +325,36 @@ public class TransactionService {
         return new TransactionResponse(updatedTransaction);
     }
 
+    private void publishFraudAlertIfNeeded(
+            Transaction transaction,
+            FraudScoreResponse fraudResponse) {
+
+        String action = fraudResponse.getAction();
+
+        if (!"FLAG".equalsIgnoreCase(action)
+                && !"BLOCK".equalsIgnoreCase(action)) {
+            return;
+        }
+
+        List<String> triggeredRules =
+                fraudResponse.getTriggeredRules() == null
+                        ? List.of()
+                        : List.copyOf(fraudResponse.getTriggeredRules());
+
+        FraudAlertEvent alertEvent = new FraudAlertEvent(
+                UUID.randomUUID(),
+                transaction.getId(),
+                transaction.getOrgId(),
+                action.toUpperCase(),
+                fraudResponse.getScore(),
+                fraudResponse.getMlScore(),
+                fraudResponse.getVelocityScore(),
+                triggeredRules,
+                LocalDateTime.now());
+
+        fraudAlertProducer.publish(alertEvent);
+    }
+
     @Transactional
     public TransactionResponse refundTransaction(
             Long id,
@@ -345,73 +363,38 @@ public class TransactionService {
         Transaction transaction =
                 getOwnedTransaction(id, email);
 
-        /*
-         * Only a successfully completed payment
-         * can be refunded.
-         */
-        if (transaction.getStatus()
-                != TransactionStatus.SUCCESS) {
-
+        if (transaction.getStatus() != TransactionStatus.SUCCESS) {
             throw new IllegalStateException(
                     "Only SUCCESS transactions can be refunded");
         }
 
-        /*
-         * The original gateway must be available.
-         * We cannot safely refund through another gateway.
-         */
         if (transaction.getGatewayName() == null
                 || transaction.getGatewayName().isBlank()) {
-
             throw new IllegalStateException(
                     "Original payment gateway is not available");
         }
 
-        /*
-         * Find the exact gateway that processed
-         * the original payment.
-         */
         PaymentGateway gateway =
                 gatewayRouter.getGatewayByName(
                         transaction.getGatewayName());
 
-        /*
-         * Execute the refund through the original gateway.
-         */
         GatewayResult refundResult =
                 gateway.refundPayment(transaction);
 
         if (!refundResult.isSuccess()) {
-
-            /*
-             * The original payment remains SUCCESS.
-             * A failed refund must not change the
-             * payment status to FAILED.
-             */
             throw new IllegalStateException(
-                    "Refund failed: "
-                            + refundResult.getMessage());
+                    "Refund failed: " + refundResult.getMessage());
         }
 
-        /*
-         * Refund succeeded.
-         */
         transaction.setStatus(TransactionStatus.REFUNDED);
 
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
-        /*
-         * Remove stale Redis data.
-         */
         transactionCacheService.evictTransaction(
                 updatedTransaction.getUserId(),
                 updatedTransaction.getId());
 
-        /*
-         * Notify Kafka consumers that the transaction
-         * has been refunded.
-         */
         publishTransactionEvent(
                 updatedTransaction,
                 TransactionEventType.REFUNDED);
@@ -437,9 +420,6 @@ public class TransactionService {
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
-        /*
-         * Invalidate stale Redis data.
-         */
         transactionCacheService.evictTransaction(
                 updatedTransaction.getUserId(),
                 updatedTransaction.getId());
@@ -469,9 +449,6 @@ public class TransactionService {
         Transaction updatedTransaction =
                 transactionRepository.save(transaction);
 
-        /*
-         * Invalidate stale Redis data.
-         */
         transactionCacheService.evictTransaction(
                 updatedTransaction.getUserId(),
                 updatedTransaction.getId());
@@ -493,10 +470,6 @@ public class TransactionService {
 
         transactionRepository.delete(transaction);
 
-        /*
-         * The transaction no longer exists in PostgreSQL,
-         * so it must also be removed from Redis.
-         */
         transactionCacheService.evictTransaction(
                 transaction.getUserId(),
                 transaction.getId());
@@ -506,17 +479,16 @@ public class TransactionService {
             Transaction transaction,
             TransactionEventType eventType) {
 
-        TransactionEvent event =
-                new TransactionEvent(
-                        transaction.getId(),
-                        transaction.getUserId(),
-                        transaction.getOrgId(),
-                        transaction.getAmount(),
-                        transaction.getCurrency(),
-                        transaction.getPaymentMethod(),
-                        transaction.getStatus(),
-                        eventType,
-                        LocalDateTime.now());
+        TransactionEvent event = new TransactionEvent(
+                transaction.getId(),
+                transaction.getUserId(),
+                transaction.getOrgId(),
+                transaction.getAmount(),
+                transaction.getCurrency(),
+                transaction.getPaymentMethod(),
+                transaction.getStatus(),
+                eventType,
+                LocalDateTime.now());
 
         transactionEventProducer.publish(event);
     }
@@ -538,7 +510,7 @@ public class TransactionService {
         }
 
         /*
-         * Verify both user ownership and organization ownership.
+         * Verify both user and organization ownership.
          */
         if (!transaction.getUserId().equals(user.getId())
                 || !transaction.getOrgId().equals(user.getOrgId())) {
