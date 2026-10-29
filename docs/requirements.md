@@ -1151,37 +1151,66 @@ The AI investigation feature shall meet these acceptance criteria before release
 11. The generated result is associated with the correct investigation in accordance with AI-007.
 12. Automated tests cover successful analysis, insufficient evidence, malformed output, provider failure, and authorization failures.
 
-## 27. AI Design Decisions to Finalize Before Implementation
+# 27. AI Design Decisions
 
-The following are design decisions, not yet implemented features:
+The following decisions establish the requirements baseline for Phase 9 AI investigation. Detailed component design and implementation specifics will be addressed in Phase 9.3.
 
-- **Model provider and model:** Select a provider compatible with the chosen Spring AI integration.
-- **RAG/vector database:** Do not add a vector database by default. First establish whether searching historical investigations or external knowledge provides a necessary benefit to the initial version.
-- **Trigger:** Begin with user-requested analysis; consider automatic analysis later if required.
-- **Persistence/versioning:** Define the stored response format, metadata, retention, and history behavior.
-- **Limits:** Define timeout, response-size, token/cost, and retry limits.
-- **Access:** Define which authorized roles can request analysis and view stored results.
-- **Evaluation:** Define test cases and review criteria for groundedness, usefulness, and safe failure.
+## 27.1 Model Provider and Integration
 
-These decisions shall be finalized in Phase 9.2 and detailed in Phase 9.3 architecture design before implementation begins.
+* The initial implementation shall use the OpenAI API through Spring AI.
+* Provider credentials shall be supplied through environment variables or approved secret configuration.
+* The model identifier shall be configurable rather than hardcoded throughout the application.
+* Spring AI dependency versions must be verified for compatibility with the project's existing Spring Boot version before implementation.
+* Provider configuration shall be isolated from investigation business logic to support future provider changes.
+
+## 27.2 RAG and Vector Database
+
+* The initial implementation shall not require a vector database or a RAG pipeline.
+* Investigation context shall initially be assembled from authorized application records and existing backend services.
+* RAG or vector search may be introduced in a future iteration if a demonstrated requirement for semantic retrieval from historical investigations or an external knowledge base emerges.
+
+## 27.3 Investigation Trigger
+
+* The initial implementation shall support user-requested AI analysis through an authorized investigation workflow.
+* Automatic analysis triggered by background events is deferred.
+* Authorization and tenant ownership shall be verified before collecting investigation evidence.
+
+## 27.4 Persistence and Analysis History
+
+* Each successful AI analysis shall be associated with its investigation.
+* Stored results shall include the investigation reference, analysis timestamp, structured response, and appropriate metadata.
+* Previous analysis results shall not be silently overwritten or discarded.
+* The persistence design shall support retrieving analysis history while enforcing tenant isolation and access control.
+* The database schema, retention policy, and detailed versioning strategy shall be specified during Phase 9.3.
+
+## 27.5 Limits and Reliability
+
+* Model calls shall use configurable timeout and bounded retry settings.
+* Response size and token usage shall
 
 ---
 
 # 28. Phase 9.2 Requirements Completion Checklist
 
-This checklist tracks the requirements work; it does not change the project's original Phase 9 structure.
+This checklist tracks the completion of Phase 9.2 — AI Requirements.
 
-- [x] Review existing AI requirements in Section 12.
-- [x] Align AI recommendations with safe resolution and human approval requirements.
-- [x] Define evidence inputs and evidence-grounding rules.
-- [x] Define structured AI output and missing-evidence behavior.
-- [x] Define tenant isolation, data minimization, and secret handling.
-- [x] Define provider failure and malformed-output behavior.
-- [x] Define AI acceptance criteria.
-- [ ] Confirm model provider and model.
-- [ ] Confirm whether the first release needs RAG/vector search.
-- [ ] Confirm analysis trigger, persistence/versioning, and retention.
-- [ ] Review and approve the requirements baseline.
+* [x] Review existing AI requirements in Section 12.
+* [x] Align AI recommendations with safe resolution and human approval requirements.
+* [x] Define evidence inputs and evidence-grounding rules.
+* [x] Define structured AI output and missing-evidence behavior.
+* [x] Define tenant isolation, data minimization, and secret handling.
+* [x] Define provider failure and malformed-output behavior.
+* [x] Define AI acceptance criteria.
+* [x] Select the initial model provider integration: OpenAI API through Spring AI.
+* [x] Decide against requiring RAG or a vector database in the initial implementation.
+* [x] Define the initial trigger as user-requested investigation analysis.
+* [x] Establish the requirement to persist analysis results and preserve analysis history.
+* [x] Define authorization, safety, and reliability requirements.
+* [x] Establish the evaluation criteria for AI investigation quality and safe failure.
+* [ ] Verify the updated requirements document and review the Git diff.
+* [ ] Commit and push the approved requirements baseline.
 
-**Status:** The AI-specific requirements have been consolidated into this SRS. Phase 9.2 remains in progress until the remaining design decisions are confirmed. No AI implementation is implied by this document.
+**Status:** The AI requirements and initial design decisions are defined. Phase 9.2 may be marked complete after the updated document is verified and the requirements baseline is committed.
+
+**Next phase:** Phase 9.3 — AI Architecture. No AI integration implementation is implied by this requirements document.
 
