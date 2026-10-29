@@ -1,100 +1,135 @@
-# PayFlow AI
-## Software Requirements Specification
+**# PayFlow AI**
 
----
+**## Software Requirements Specification**
 
-# 1. Functional Requirements
+**---**
 
-## 1.1 Authentication
+**# 1. Functional Requirements**
 
-### AUTH-001
+**## 1.1 Authentication**
+
+**### AUTH-001**
+
 The system shall allow users to log in using valid credentials.
 
-### AUTH-002
+**### AUTH-002**
+
 The system shall securely authenticate users before allowing access
+
 to protected resources.
 
-### AUTH-003
+**### AUTH-003**
+
 The system shall assign users appropriate roles.
 
 Supported roles:
 
-- ADMIN
-- FINANCE
-- OPERATIONS
-- RISK_ANALYST
+\- ADMIN
 
-### AUTH-004
+\- FINANCE
+
+\- OPERATIONS
+
+\- RISK_ANALYST
+
+**### AUTH-004**
+
 The system shall restrict protected operations according to the
+
 authenticated user's role and permissions.
 
----
+**---**
 
-# 2. User Management
+**# 2. User Management**
 
-### USER-001
+**### USER-001**
+
 ADMIN users shall be able to create and manage users.
 
-### USER-002
+**### USER-002**
+
 ADMIN users shall be able to assign roles to users.
 
-### USER-003
+**### USER-003**
+
 The system shall maintain user account status.
 
 Possible states:
 
-- ACTIVE
-- DISABLED
+\- ACTIVE
 
----
+\- DISABLED
 
-# 3. Payment Management
+**---**
 
-### PAY-001
+**# 3. Payment Management**
+
+**### PAY-001**
+
 The system shall allow authorized users or systems to create payments.
 
-### PAY-002
+**### PAY-002**
+
 Each payment shall have a unique payment identifier.
 
-### PAY-003
+**### PAY-003**
+
 The system shall store:
 
-- Amount
-- Currency
-- Customer/reference information
-- Payment status
-- Creation timestamp
-- Last updated timestamp
+\- Amount
 
-### PAY-004
+\- Currency
+
+\- Customer/reference information
+
+\- Payment status
+
+\- Creation timestamp
+
+\- Last updated timestamp
+
+**### PAY-004**
+
 The system shall maintain payment attempts separately from the
+
 main payment record.
 
-### PAY-005
+**### PAY-005**
+
 The system shall provide payment history.
 
-### PAY-006
+**### PAY-006**
+
 The system shall prevent duplicate payment processing using
+
 idempotency controls.
 
----
+**---**
 
-# 4. Payment State Machine
+**# 4. Payment State Machine**
 
-### STATE-001
+**### STATE-001**
+
 The system shall maintain payment states using a controlled
+
 state-transition mechanism.
 
-### STATE-002
+**### STATE-002**
+
 The system shall support the following payment states:
 
-- CREATED
-- PROCESSING
-- SUCCESS
-- FAILED
-- REFUNDED
+\- CREATED
 
-### STATE-003
+\- PROCESSING
+
+\- SUCCESS
+
+\- FAILED
+
+\- REFUNDED
+
+**### STATE-003**
+
 The system shall permit only predefined valid state transitions.
 
 Example:
@@ -109,7 +144,8 @@ FAILED → PROCESSING
 
 SUCCESS → REFUNDED
 
-### STATE-004
+**### STATE-004**
+
 The system shall reject invalid state transitions.
 
 Examples:
@@ -120,630 +156,1032 @@ REFUNDED → SUCCESS
 
 REFUNDED → PROCESSING
 
-### STATE-005
+**### STATE-005**
+
 Every important state transition shall be recorded for auditing.
 
----
+**---**
 
-# 5. Payment Gateway Management
+**# 5. Payment Gateway Management**
 
-### GATEWAY-001
+**### GATEWAY-001**
+
 The system shall support multiple payment gateways.
 
-### GATEWAY-002
+**### GATEWAY-002**
+
 The first implementation shall provide simulated payment gateways
+
 for development and demonstration.
 
-### GATEWAY-003
+**### GATEWAY-003**
+
 Each gateway shall expose a consistent payment-processing interface.
 
-### GATEWAY-004
+**### GATEWAY-004**
+
 The system shall record gateway responses for payment attempts.
 
-### GATEWAY-005
+**### GATEWAY-005**
+
 The system shall track gateway availability and performance metrics.
 
----
+**---**
 
-# 6. Smart Gateway Routing
+**# 6. Smart Gateway Routing**
 
-### ROUTE-001
+**### ROUTE-001**
+
 The system shall select an appropriate payment gateway for a
+
 payment attempt.
 
-### ROUTE-002
+**### ROUTE-002**
+
 The routing engine shall be capable of considering:
 
-- Gateway availability
-- Success rate
-- Response latency
-- Failure rate
-- Configured routing rules
+\- Gateway availability
 
-### ROUTE-003
+\- Success rate
+
+\- Response latency
+
+\- Failure rate
+
+\- Configured routing rules
+
+**### ROUTE-003**
+
 The system shall support configurable gateway routing strategies.
 
-### ROUTE-004
+**### ROUTE-004**
+
 The system shall avoid routing traffic to an unavailable gateway
+
 when an eligible alternative exists.
 
-### ROUTE-005
+**### ROUTE-005**
+
 The system shall support gateway failover.
 
-### ROUTE-006
+**### ROUTE-006**
+
 The system shall record the gateway selected for each payment attempt.
 
----
+**---**
 
-# 7. Retry and Failure Handling
+**# 7. Retry and Failure Handling**
 
-### RETRY-001
+**### RETRY-001**
+
 The system shall identify retryable payment failures.
 
-### RETRY-002
+**### RETRY-002**
+
 The system shall distinguish retryable failures from non-retryable
+
 failures.
 
-### RETRY-003
+**### RETRY-003**
+
 The system shall maintain the number of payment attempts.
 
-### RETRY-004
+**### RETRY-004**
+
 The system shall prevent unlimited retries.
 
-### RETRY-005
+**### RETRY-005**
+
 The system shall record the reason for each retry.
 
-### FAIL-001
+**### FAIL-001**
+
 The system shall capture structured payment failure information.
 
 Failure information shall include where available:
 
-- Failure category
-- Gateway
-- Error code
-- Error message
-- Attempt number
-- Timestamp
-- Processing duration
+\- Failure category
 
----
+\- Gateway
 
-# 8. Settlement Management
+\- Error code
 
-### SETTLE-001
+\- Error message
+
+\- Attempt number
+
+\- Timestamp
+
+\- Processing duration
+
+**---**
+
+**# 8. Settlement Management**
+
+**### SETTLE-001**
+
 The system shall store external settlement records.
 
-### SETTLE-002
+**### SETTLE-002**
+
 A settlement record shall contain:
 
-- Settlement identifier
-- Transaction reference
-- Amount
-- Currency
-- Status
-- Gateway
-- Settlement timestamp
+\- Settlement identifier
 
-### SETTLE-003
+\- Transaction reference
+
+\- Amount
+
+\- Currency
+
+\- Status
+
+\- Gateway
+
+\- Settlement timestamp
+
+**### SETTLE-003**
+
 The system shall support simulated external settlement data
+
 for development and testing.
 
----
+**---**
 
-# 9. Reconciliation
+**# 9. Reconciliation**
 
-### RECON-001
+**### RECON-001**
+
 The system shall compare internal payment records with external
+
 settlement records.
 
-### RECON-002
+**### RECON-002**
+
 The reconciliation engine shall identify matching records.
 
-### RECON-003
+**### RECON-003**
+
 The reconciliation engine shall identify missing settlement records.
 
-### RECON-004
+**### RECON-004**
+
 The reconciliation engine shall identify missing internal records.
 
-### RECON-005
+**### RECON-005**
+
 The reconciliation engine shall identify amount mismatches.
 
-### RECON-006
+**### RECON-006**
+
 The reconciliation engine shall identify status mismatches.
 
-### RECON-007
+**### RECON-007**
+
 The reconciliation engine shall identify duplicate records
+
 where applicable.
 
-### RECON-008
+**### RECON-008**
+
 The system shall create an investigation case when a configured
+
 reconciliation inconsistency requires investigation.
 
----
+**---**
 
-# 10. Investigation Case Management
+**# 10. Investigation Case Management**
 
-### CASE-001
+**### CASE-001**
+
 The system shall create an investigation case for qualifying
+
 payment or reconciliation incidents.
 
-### CASE-002
+**### CASE-002**
+
 Each case shall have a unique case identifier.
 
-### CASE-003
+**### CASE-003**
+
 A case shall contain:
 
-- Case ID
-- Related transaction
-- Problem type
-- Severity
-- Status
-- Evidence
-- Timeline
-- AI analysis
-- Recommended action
-- Resolution status
-- Assigned user
+\- Case ID
 
-### CASE-004
+\- Related transaction
+
+\- Problem type
+
+\- Severity
+
+\- Status
+
+\- Evidence
+
+\- Timeline
+
+\- AI analysis
+
+\- Recommended action
+
+\- Resolution status
+
+\- Assigned user
+
+**### CASE-004**
+
 The system shall support the following case statuses:
 
-- OPEN
-- INVESTIGATING
-- AWAITING_APPROVAL
-- RESOLVED
-- ESCALATED
+\- OPEN
 
-### CASE-005
+\- INVESTIGATING
+
+\- AWAITING_APPROVAL
+
+\- RESOLVED
+
+\- ESCALATED
+
+**### CASE-005**
+
 Authorized users shall be able to update investigation cases.
 
-### CASE-006
+**### CASE-006**
+
 The system shall maintain the history of important case changes.
 
----
+**---**
 
-# 11. Evidence Collection
+**# 11. Evidence Collection**
 
-### EVIDENCE-001
+**### EVIDENCE-001**
+
 The investigation system shall collect relevant transaction
+
 information.
 
-### EVIDENCE-002
+**### EVIDENCE-002**
+
 The investigation system shall collect relevant payment attempt
+
 information.
 
-### EVIDENCE-003
+**### EVIDENCE-003**
+
 The investigation system shall collect gateway response information.
 
-### EVIDENCE-004
+**### EVIDENCE-004**
+
 The investigation system shall collect settlement information.
 
-### EVIDENCE-005
+**### EVIDENCE-005**
+
 The investigation system shall collect relevant event history.
 
-### EVIDENCE-006
+**### EVIDENCE-006**
+
 Collected evidence shall be associated with the relevant
+
 investigation case.
 
----
+**---**
 
-# 12. AI Root-Cause Investigation
+**# 12. AI Root-Cause Investigation**
 
-### AI-001
+**### AI-001**
+
 The system shall provide AI-assisted investigation of eligible
+
 payment and settlement incidents.
 
-### AI-002
+**### AI-002**
+
 The AI investigation system may analyze:
 
-- Transaction information
-- Payment attempts
-- Gateway responses
-- Settlement information
-- Failure information
-- Event history
-- Relevant historical investigation information
+\- Transaction information
 
-### AI-003
+\- Payment attempts
+
+\- Gateway responses
+
+\- Settlement information
+
+\- Failure information
+
+\- Event history
+
+\- Relevant historical investigation information
+
+**### AI-003**
+
 The AI system shall provide a probable root-cause analysis.
 
-### AI-004
+**### AI-004**
+
 The AI system shall provide a human-readable explanation.
 
-### AI-005
+**### AI-005**
+
 The AI system shall summarize relevant evidence.
 
-### AI-006
+**### AI-006**
+
 The AI system shall provide a recommended next action.
 
-### AI-007
+**### AI-007**
+
 The system shall store the AI investigation result with the
+
 associated investigation case.
 
-### AI-008
+**### AI-008**
+
 AI output shall be treated as a recommendation and shall not
+
 automatically override deterministic business rules.
 
----
+**---**
 
-# 13. Safe Resolution
+**# 13. Safe Resolution**
 
-### RESOLVE-001
+**### RESOLVE-001**
+
 The system shall validate AI recommendations before executing
+
 eligible resolution actions.
 
-### RESOLVE-002
+**### RESOLVE-002**
+
 The system shall use deterministic policies to determine whether
+
 an action can be automatically executed.
 
-### RESOLVE-003
+**### RESOLVE-003**
+
 The system shall perform permission checks before executing
+
 protected resolution actions.
 
-### RESOLVE-004
+**### RESOLVE-004**
+
 The system shall perform risk checks before executing resolution
+
 actions.
 
-### RESOLVE-005
+**### RESOLVE-005**
+
 Low-risk actions may be automatically executed when explicitly
+
 permitted by policy.
 
-### RESOLVE-006
+**### RESOLVE-006**
+
 High-risk actions shall require appropriate human approval.
 
-### RESOLVE-007
+**### RESOLVE-007**
+
 The AI system shall not directly modify critical financial records.
 
-### RESOLVE-008
+**### RESOLVE-008**
+
 Every executed resolution action shall produce an audit record.
 
----
+**---**
 
-# 14. Human Approval
+**# 14. Human Approval**
 
-### APPROVAL-001
+**### APPROVAL-001**
+
 The system shall allow authorized users to review high-risk
+
 resolution recommendations.
 
-### APPROVAL-002
+**### APPROVAL-002**
+
 Authorized users shall be able to approve or reject an eligible
+
 resolution.
 
-### APPROVAL-003
+**### APPROVAL-003**
+
 The system shall record:
 
-- Approver
-- Decision
-- Timestamp
-- Reason
-- Resolution requested
+\- Approver
 
-### APPROVAL-004
+\- Decision
+
+\- Timestamp
+
+\- Reason
+
+\- Resolution requested
+
+**### APPROVAL-004**
+
 Rejected resolutions shall not be executed.
 
----
+**---**
 
-# 15. Event-Driven Processing
+**# 15. Event-Driven Processing**
 
-### EVENT-001
+**### EVENT-001**
+
 The system shall publish important business events for
+
 asynchronous processing.
 
-### EVENT-002
+**### EVENT-002**
+
 The system shall support events including:
 
-- PaymentCreated
-- PaymentProcessing
-- PaymentSucceeded
-- PaymentFailed
-- PaymentRetried
-- SettlementReceived
-- ReconciliationCompleted
-- ReconciliationMismatchDetected
-- InvestigationCreated
-- AIAnalysisCompleted
-- ResolutionCompleted
+\- PaymentCreated
 
-### EVENT-003
+\- PaymentProcessing
+
+\- PaymentSucceeded
+
+\- PaymentFailed
+
+\- PaymentRetried
+
+\- SettlementReceived
+
+\- ReconciliationCompleted
+
+\- ReconciliationMismatchDetected
+
+\- InvestigationCreated
+
+\- AIAnalysisCompleted
+
+\- ResolutionCompleted
+
+**### EVENT-003**
+
 Apache Kafka shall be used as the event transport layer.
 
-### EVENT-004
+**### EVENT-004**
+
 Consumers shall process events independently where appropriate.
 
----
+**---**
 
-# 16. Transactional Outbox
+**# 16. Transactional Outbox**
 
-### OUTBOX-001
+**### OUTBOX-001**
+
 The system shall use the Transactional Outbox pattern for
+
 important business events.
 
-### OUTBOX-002
+**### OUTBOX-002**
+
 A business database change and its corresponding outbox event
+
 shall be persisted within the same database transaction.
 
-### OUTBOX-003
+**### OUTBOX-003**
+
 The system shall maintain an outbox record containing information
+
 required for event publishing.
 
-### OUTBOX-004
+**### OUTBOX-004**
+
 An outbox publisher shall publish eligible outbox events to Kafka.
 
-### OUTBOX-005
+**### OUTBOX-005**
+
 The system shall track the publishing status of outbox events.
 
-### OUTBOX-006
+**### OUTBOX-006**
+
 Failed event publishing shall support retry processing.
 
----
+**---**
 
-# 17. Event Timeline
+**# 17. Event Timeline**
 
-### TIMELINE-001
+**### TIMELINE-001**
+
 The system shall maintain a chronological event timeline for
+
 important transactions and investigation cases.
 
-### TIMELINE-002
+**### TIMELINE-002**
+
 Timeline entries shall contain:
 
-- Event type
-- Timestamp
-- Related entity
-- Description
-- Actor where applicable
+\- Event type
 
-### TIMELINE-003
+\- Timestamp
+
+\- Related entity
+
+\- Description
+
+\- Actor where applicable
+
+**### TIMELINE-003**
+
 Authorized users shall be able to view the transaction timeline.
 
----
+**---**
 
-# 18. Redis
+**# 18. Redis**
 
-### REDIS-001
+**### REDIS-001**
+
 The system shall use Redis for appropriate low-latency data needs.
 
-### REDIS-002
+**### REDIS-002**
+
 Redis may be used for:
 
-- Gateway health information
-- Rate limiting
-- Idempotency support
-- Frequently accessed data
-- Temporary processing state
+\- Gateway health information
 
-### REDIS-003
+\- Rate limiting
+
+\- Idempotency support
+
+\- Frequently accessed data
+
+\- Temporary processing state
+
+**### REDIS-003**
+
 Redis shall not be treated as the authoritative source for
+
 critical financial records.
 
 PostgreSQL shall remain the authoritative transactional database.
 
----
+**---**
 
-# 19. Frontend
+**# 19. Frontend**
 
-### UI-001
+**### UI-001**
+
 The system shall provide a React-based web application.
 
-### UI-002
+**### UI-002**
+
 The frontend shall provide authentication screens.
 
-### UI-003
+**### UI-003**
+
 The frontend shall provide an operational dashboard.
 
-### UI-004
+**### UI-004**
+
 The frontend shall provide a transaction management interface.
 
-### UI-005
+**### UI-005**
+
 The frontend shall provide payment details and lifecycle information.
 
-### UI-006
+**### UI-006**
+
 The frontend shall provide gateway health information.
 
-### UI-007
+**### UI-007**
+
 The frontend shall provide reconciliation information.
 
-### UI-008
+**### UI-008**
+
 The frontend shall provide investigation case management.
 
-### UI-009
+**### UI-009**
+
 The frontend shall provide AI investigation results.
 
-### UI-010
+**### UI-010**
+
 The frontend shall provide resolution approval workflows.
 
-### UI-011
+**### UI-011**
+
 The frontend shall provide analytics.
 
-### UI-012
+**### UI-012**
+
 The frontend shall provide event and audit timelines.
 
-### UI-013
+**### UI-013**
+
 Redux Toolkit shall be used for appropriate application state
+
 management.
 
----
+**---**
 
-# 20. Analytics
+**# 20. Analytics**
 
-### ANALYTICS-001
+**### ANALYTICS-001**
+
 The system shall calculate transaction statistics.
 
-### ANALYTICS-002
+**### ANALYTICS-002**
+
 The dashboard shall provide:
 
-- Total transactions
-- Successful transactions
-- Failed transactions
-- Success rate
-- Failure rate
-- Gateway performance
-- Gateway latency
-- Reconciliation mismatches
-- Open investigation cases
-- Resolved cases
-- Resolution statistics
+\- Total transactions
 
----
+\- Successful transactions
 
-# 21. Audit
+\- Failed transactions
 
-### AUDIT-001
+\- Success rate
+
+\- Failure rate
+
+\- Gateway performance
+
+\- Gateway latency
+
+\- Reconciliation mismatches
+
+\- Open investigation cases
+
+\- Resolved cases
+
+\- Resolution statistics
+
+**---**
+
+**# 21. Audit**
+
+**### AUDIT-001**
+
 The system shall record important security, financial and
+
 operational actions.
 
-### AUDIT-002
+**### AUDIT-002**
+
 Audit records shall contain where applicable:
 
-- Actor
-- Action
-- Timestamp
-- Target entity
-- Previous state
-- New state
-- Reason
+\- Actor
 
-### AUDIT-003
+\- Action
+
+\- Timestamp
+
+\- Target entity
+
+\- Previous state
+
+\- New state
+
+\- Reason
+
+**### AUDIT-003**
+
 Audit records shall be protected from unauthorized modification.
 
----
+**---**
 
-# 22. Non-Functional Requirements
+**# 22. Non-Functional Requirements**
 
-## NFR-001 Reliability
+**## NFR-001 Reliability**
 
 The system should continue processing eligible payments when an
+
 individual gateway becomes unavailable.
 
-## NFR-002 Consistency
+**## NFR-002 Consistency**
 
 Critical financial state changes shall respect transaction
+
 boundaries and defined business invariants.
 
-## NFR-003 Security
+**## NFR-003 Security**
 
 Protected resources shall require authentication and appropriate
+
 authorization.
 
-## NFR-004 Performance
+**## NFR-004 Performance**
 
 The system should minimize unnecessary database operations and use
+
 caching where appropriate.
 
-## NFR-005 Scalability
+**## NFR-005 Scalability**
 
 The architecture should support increasing transaction volume and
+
 asynchronous event processing.
 
-## NFR-006 Maintainability
+**## NFR-006 Maintainability**
 
 The system shall maintain clear separation of responsibilities
+
 between modules.
 
-## NFR-007 Testability
+**## NFR-007 Testability**
 
 Core business logic and APIs shall be independently testable.
 
-## NFR-008 Observability
+**## NFR-008 Observability**
 
 Important processing operations should produce useful logs and
+
 operational metrics.
 
----
+**---**
 
-# 23. Technology Requirements
+**# 23. Technology Requirements**
 
-## Backend
+**## Backend**
 
-- Java 21
-- Spring Boot
-- Spring MVC
-- Spring Security
-- Spring Data JPA
-- Hibernate
-- Maven
+\- Java 21
 
-## Database
+\- Spring Boot
 
-- PostgreSQL
+\- Spring MVC
 
-## Messaging
+\- Spring Security
 
-- Apache Kafka
+\- Spring Data JPA
 
-## Caching
+\- Hibernate
 
-- Redis
+\- Maven
 
-## Frontend
+**## Database**
 
-- React
-- JavaScript
-- Redux Toolkit
-- HTML
-- CSS
+\- PostgreSQL
 
-## AI
+**## Messaging**
 
-- Spring AI
-- LLM API
-- Vector Database
-- RAG
+\- Apache Kafka
 
-## Testing
+**## Caching**
 
-- JUnit
-- Mockito
-- MockMvc
+\- Redis
 
-## DevOps
+**## Frontend**
 
-- Git
-- GitHub
-- Docker
-- GitHub Actions
-- Jenkins basics
+\- React
 
-## Cloud
+\- JavaScript
 
-- AWS
+\- Redux Toolkit
 
----
+\- HTML
 
-# 24. MVP Priority
+\- CSS
+
+**## AI**
+
+\- Spring AI
+
+\- LLM API
+
+\- Vector Database
+
+\- RAG
+
+**## Testing**
+
+\- JUnit
+
+\- Mockito
+
+\- MockMvc
+
+**## DevOps**
+
+\- Git
+
+\- GitHub
+
+\- Docker
+
+\- GitHub Actions
+
+\- Jenkins basics
+
+**## Cloud**
+
+\- AWS
+
+**---**
+
+**# 24. MVP Priority**
 
 The first working version shall prioritize:
 
 P0 — Critical:
 
-- Authentication
-- Users and roles
-- Payment creation
-- Payment state machine
-- Gateway simulation
-- Smart gateway routing
-- Retry and failure handling
-- Settlement records
-- Reconciliation
-- Investigation cases
-- React dashboard
-- Basic AI investigation
-- Audit timeline
+\- Authentication
+
+\- Users and roles
+
+\- Payment creation
+
+\- Payment state machine
+
+\- Gateway simulation
+
+\- Smart gateway routing
+
+\- Retry and failure handling
+
+\- Settlement records
+
+\- Reconciliation
+
+\- Investigation cases
+
+\- React dashboard
+
+\- Basic AI investigation
+
+\- Audit timeline
 
 P1 — Important:
 
-- Kafka
-- Transactional Outbox
-- Redis
-- Safe resolution
-- Human approval
-- Advanced analytics
+\- Kafka
+
+\- Transactional Outbox
+
+\- Redis
+
+\- Safe resolution
+
+\- Human approval
+
+\- Advanced analytics
 
 P2 — Advanced:
 
-- RAG
-- Vector database
-- AI agents
-- Microservices
-- Advanced AWS architecture
-- Advanced observability
-- Advanced performance testing
+\- RAG
+
+\- Vector database
+
+\- AI agents
+
+\- Microservices
+
+\- Advanced AWS architecture
+
+\- Advanced observability
+
+\- Advanced performance testing
+
+---
+
+# 25. Detailed AI Investigation Requirements
+
+This section extends the existing AI requirements in Section 12. It supplements the Software Requirements Specification and does not replace the existing payment, reconciliation, safe-resolution, approval, or audit requirements.
+
+## 25.1 AI Investigation Inputs
+
+### AI-REQ-001 — Authorized evidence collection
+The system shall collect evidence only after confirming that the authenticated user is authorized to access the requested investigation and its related records.
+
+### AI-REQ-002 — Relevant evidence sources
+Where available and authorized, the AI context may include:
+- Internal transaction details and status history.
+- External payment or settlement records.
+- Reconciliation result, mismatch reason, and timestamps.
+- Payment attempt and gateway response information.
+- Structured failure information.
+- Relevant Kafka/event history available to the application.
+- Related investigation details and prior investigation outcomes, when useful.
+
+### AI-REQ-003 — Evidence provenance
+The system shall retain references to the application records used to build the analysis context so that the explanation can be checked against source evidence.
+
+### AI-REQ-004 — Missing evidence
+The system shall identify when expected evidence is missing, unavailable, or contradictory. Missing information shall not be fabricated.
+
+## 25.2 AI Investigation Output
+
+### AI-REQ-005 — Structured response
+The AI investigation service shall return a validated structured result containing:
+- `summary`: concise description of the issue.
+- `observedEvidence`: facts directly supported by the supplied records.
+- `likelyExplanation`: a probable explanation, explicitly marked as a hypothesis when not proven.
+- `recommendedNextSteps`: practical investigation steps for an authorized operator.
+- `missingInformation`: relevant evidence that is unavailable.
+- `limitations`: uncertainty or constraints affecting the analysis.
+
+The final Java DTO and API schema shall be defined during architecture and API design.
+
+### AI-REQ-006 — Evidence-based explanation
+The system shall not present a model-generated assumption as a recorded fact. Amounts, statuses, identifiers, timestamps, and event details must be grounded in supplied evidence.
+
+### AI-REQ-007 — Actionable recommendations
+Recommendations shall be specific to the discrepancy and shall explain what the operator should check next. Recommendations shall not be executed directly by the model.
+
+### AI-REQ-008 — Invalid or unsupported conclusions
+If the evidence is insufficient to support a likely explanation, the system shall state that the cause cannot be determined from the available information and identify what additional evidence may be needed.
+
+## 25.3 Triggering and Persistence
+
+### AI-REQ-009 — Initial trigger
+The initial version shall support user-requested analysis from an authorized investigation workflow. Automatic analysis triggered by background events is deferred unless separately approved.
+
+### AI-REQ-010 — Persist analysis
+Consistent with AI-007 in Section 12, the system shall store the generated analysis with its associated investigation, including suitable metadata to identify the investigation and analysis time.
+
+### AI-REQ-011 — Analysis history
+The architecture shall define whether repeated analysis creates a new version or replaces the latest result. The implementation shall not silently discard required audit history.
+
+## 25.4 Security, Privacy, and Safety
+
+### AI-REQ-012 — Tenant isolation
+The system shall enforce organization/tenant authorization before loading investigation context. A record identifier alone shall not grant access. Related records must be checked for consistent authorized ownership.
+
+### AI-REQ-013 — Data minimization
+The system shall send only the fields needed for analysis. Passwords, JWTs, API keys, credentials, and unrelated sensitive data shall not be sent to the model provider.
+
+### AI-REQ-014 — Model output is untrusted
+The backend shall validate model output structure, field types, and reasonable size limits. Malformed output shall not trigger application actions.
+
+### AI-REQ-015 — No direct financial actions by AI
+The model shall not directly create, refund, cancel, or alter payments; modify reconciliation records; or resolve investigation cases. Any eligible resolution action must pass through the deterministic policies, authorization, risk checks, approval requirements, and audit controls defined in Sections 13, 14, and 21.
+
+### AI-REQ-016 — Prompt-injection resistance
+Transaction descriptions, gateway messages, event payloads, and other evidence shall be treated as untrusted data, not as instructions that can override system rules or authorize actions.
+
+### AI-REQ-017 — Secret management
+AI provider credentials shall be supplied through environment variables or approved secret configuration and shall not be committed to source control.
+
+## 25.5 Reliability and Error Handling
+
+### AI-REQ-018 — Provider failures
+The system shall handle model-provider timeouts, rate limits, unavailable credentials, network failures, and provider errors with controlled responses.
+
+### AI-REQ-019 — Payment processing independence
+AI availability shall not be a prerequisite for ordinary payment processing, reconciliation persistence, or investigation creation.
+
+### AI-REQ-020 — Retry policy
+Any model-call retry policy shall be bounded, respect provider rate limits, and avoid uncontrolled repeated requests or duplicate persisted analyses.
+
+### AI-REQ-021 — Safe failure
+If analysis fails, the application shall preserve existing transaction and investigation data and communicate that the AI analysis is unavailable or incomplete.
+
+## 25.6 Logging and Audit
+
+### AI-REQ-022 — Operational traceability
+The system shall record appropriate analysis metadata and operational failures so an analysis can be associated with its investigation.
+
+### AI-REQ-023 — Sensitive-data protection
+Logs shall not contain provider secrets, tokens, or unnecessary raw payment data. The architecture shall specify which analysis metadata is persisted and for how long.
+
+## 26. AI Acceptance Criteria
+
+The AI investigation feature shall meet these acceptance criteria before release:
+
+1. An authorized user can request analysis for an investigation.
+2. The service uses actual authorized application records as context.
+3. The response contains a summary, observed evidence, likely explanation, recommended next steps, missing information, and limitations.
+4. The response distinguishes observed facts from hypotheses.
+5. Missing or conflicting evidence is explicitly disclosed.
+6. A user cannot use an investigation ID to access another tenant's data.
+7. Malformed model output is rejected or safely handled.
+8. Provider timeouts and errors do not corrupt payment or investigation records.
+9. AI cannot bypass deterministic business rules, approval, authorization, or audit controls.
+10. Provider credentials and unrelated sensitive data are not exposed to the model or logs.
+11. The generated result is associated with the correct investigation in accordance with AI-007.
+12. Automated tests cover successful analysis, insufficient evidence, malformed output, provider failure, and authorization failures.
+
+## 27. AI Design Decisions to Finalize Before Implementation
+
+The following are design decisions, not yet implemented features:
+
+- **Model provider and model:** Select a provider compatible with the chosen Spring AI integration.
+- **RAG/vector database:** Do not add a vector database by default. First establish whether searching historical investigations or external knowledge provides a necessary benefit to the initial version.
+- **Trigger:** Begin with user-requested analysis; consider automatic analysis later if required.
+- **Persistence/versioning:** Define the stored response format, metadata, retention, and history behavior.
+- **Limits:** Define timeout, response-size, token/cost, and retry limits.
+- **Access:** Define which authorized roles can request analysis and view stored results.
+- **Evaluation:** Define test cases and review criteria for groundedness, usefulness, and safe failure.
+
+These decisions shall be finalized in Phase 9.2 and detailed in Phase 9.3 architecture design before implementation begins.
+
+---
+
+# 28. Phase 9.2 Requirements Completion Checklist
+
+This checklist tracks the requirements work; it does not change the project's original Phase 9 structure.
+
+- [x] Review existing AI requirements in Section 12.
+- [x] Align AI recommendations with safe resolution and human approval requirements.
+- [x] Define evidence inputs and evidence-grounding rules.
+- [x] Define structured AI output and missing-evidence behavior.
+- [x] Define tenant isolation, data minimization, and secret handling.
+- [x] Define provider failure and malformed-output behavior.
+- [x] Define AI acceptance criteria.
+- [ ] Confirm model provider and model.
+- [ ] Confirm whether the first release needs RAG/vector search.
+- [ ] Confirm analysis trigger, persistence/versioning, and retention.
+- [ ] Review and approve the requirements baseline.
+
+**Status:** The AI-specific requirements have been consolidated into this SRS. Phase 9.2 remains in progress until the remaining design decisions are confirmed. No AI implementation is implied by this document.
+
