@@ -10,7 +10,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,15 +33,10 @@ public class SettlementJobService {
     }
 
     /**
-     * Reconciles a batch of internal transaction IDs and publishes
-     * settlement lifecycle events.
+     * Reconciles transactions belonging to the specified organization.
      *
-     * The job ID identifies this execution. It is not a payment ID.
-     *
-     * @param jobId unique settlement job identifier
-     * @param orgId organization that owns the transactions
-     * @param transactionIds transaction IDs to reconcile
-     * @return settlement job summary
+     * ReconciliationService must verify that each transaction
+     * belongs to the supplied organization before processing it.
      */
     public SettlementJobResult executeSettlementJob(
             String jobId,
@@ -61,18 +58,24 @@ public class SettlementJobService {
         int discrepancyCount = 0;
 
         try {
-
             for (Long transactionId : transactionIds) {
 
                 ReconciliationRecord record =
                         reconciliationService.reconcileTransaction(
-                                transactionId
+                                transactionId,
+                                orgId
                         );
+
+                if (record == null) {
+                    throw new IllegalStateException(
+                            "Reconciliation returned no record for transaction "
+                                    + transactionId
+                    );
+                }
 
                 processedCount++;
 
                 if (record.getStatus() != ReconciliationStatus.MATCHED) {
-
                     discrepancyCount++;
 
                     publishEvent(
@@ -81,7 +84,7 @@ public class SettlementJobService {
                             SettlementJobEventType.DISCREPANCY_DETECTED,
                             processedCount,
                             discrepancyCount,
-                            "Reconciliation discrepancy detected for transaction "
+                            "Discrepancy detected for transaction "
                                     + transactionId
                                     + ": "
                                     + record.getStatus()
@@ -95,12 +98,11 @@ public class SettlementJobService {
                     SettlementJobEventType.COMPLETED,
                     processedCount,
                     discrepancyCount,
-                    "Settlement job completed"
+                    "Settlement job completed successfully"
             );
 
             log.info(
-                    "Settlement job completed: jobId={}, orgId={}, " +
-                            "processedCount={}, discrepancyCount={}",
+                    "Settlement job completed: jobId={}, orgId={}, processed={}, discrepancies={}",
                     jobId,
                     orgId,
                     processedCount,
@@ -115,39 +117,62 @@ public class SettlementJobService {
 
         } catch (RuntimeException exception) {
 
-            try {
-
-                publishEvent(
-                        jobId,
-                        orgId,
-                        SettlementJobEventType.FAILED,
-                        processedCount,
-                        discrepancyCount,
-                        "Settlement job failed: "
-                                + exception.getClass().getSimpleName()
-                );
-
-            } catch (RuntimeException eventException) {
-
-                exception.addSuppressed(eventException);
-
-                log.error(
-                        "Could not publish settlement failure event: jobId={}",
-                        jobId,
-                        eventException
-                );
-            }
-
             log.error(
-                    "Settlement job failed: jobId={}, processedCount={}, " +
-                            "discrepancyCount={}",
+                    "Settlement job failed: jobId={}, orgId={}, processed={}",
                     jobId,
+                    orgId,
                     processedCount,
-                    discrepancyCount,
                     exception
             );
 
+            publishEvent(
+                    jobId,
+                    orgId,
+                    SettlementJobEventType.FAILED,
+                    processedCount,
+                    discrepancyCount,
+                    "Settlement job failed: " + exception.getMessage()
+            );
+
             throw exception;
+        }
+    }
+
+    private void validateInput(
+            String jobId,
+            Long orgId,
+            List<Long> transactionIds) {
+
+        if (jobId == null || jobId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Settlement job ID is required"
+            );
+        }
+
+        if (orgId == null) {
+            throw new IllegalArgumentException(
+                    "Organization ID is required"
+            );
+        }
+
+        if (transactionIds == null || transactionIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Transaction IDs must not be null or empty"
+            );
+        }
+
+        if (transactionIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException(
+                    "Transaction IDs must be positive and must not contain null"
+            );
+        }
+
+        Set<Long> uniqueIds = new HashSet<>(transactionIds);
+
+        if (uniqueIds.size() != transactionIds.size()) {
+            throw new IllegalArgumentException(
+                    "Duplicate transaction IDs are not allowed"
+            );
         }
     }
 
@@ -170,46 +195,9 @@ public class SettlementJobService {
                 LocalDateTime.now()
         );
 
-        /*
-         * Wait for Kafka's send result so that a publishing failure
-         * is visible to the settlement workflow.
-         */
-        eventProducer.publish(event).join();
+        eventProducer.publish(event);
     }
 
-    private void validateInput(
-            String jobId,
-            Long orgId,
-            List<Long> transactionIds) {
-
-        if (jobId == null || jobId.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Settlement job ID cannot be blank"
-            );
-        }
-
-        if (orgId == null) {
-            throw new IllegalArgumentException(
-                    "Organization ID cannot be null"
-            );
-        }
-
-        if (transactionIds == null || transactionIds.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Settlement job must contain at least one transaction"
-            );
-        }
-
-        if (transactionIds.stream().anyMatch(id -> id == null)) {
-            throw new IllegalArgumentException(
-                    "Settlement transaction IDs cannot contain null values"
-            );
-        }
-    }
-
-    /**
-     * Summary returned after successful job execution.
-     */
     public static class SettlementJobResult {
 
         private final String jobId;
@@ -239,3 +227,4 @@ public class SettlementJobService {
         }
     }
 }
+

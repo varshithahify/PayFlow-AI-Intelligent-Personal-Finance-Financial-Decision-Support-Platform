@@ -1,3 +1,4 @@
+
 package com.payflow.payflow_backend.service;
 
 import com.payflow.payflow_backend.entity.InvestigationIssueType;
@@ -51,10 +52,11 @@ public class FailedEventRecoveryService {
         Long orgId = null;
 
         /*
-         * Associate the failure with a transaction only
-         * if that transaction actually exists in the database.
+         * Associate the failure with a transaction only if
+         * the transaction exists in the database.
          */
         if (transactionId != null) {
+
             Transaction transaction = transactionRepository
                     .findById(transactionId)
                     .orElse(null);
@@ -66,18 +68,20 @@ public class FailedEventRecoveryService {
         }
 
         /*
-         * Limit the failure reason to the database column length.
+         * Respect the database column length for failure reasons.
          */
         String safeFailureReason = failureReason;
 
         if (safeFailureReason != null
                 && safeFailureReason.length() > 1000) {
-            safeFailureReason = safeFailureReason.substring(0, 1000);
+
+            safeFailureReason =
+                    safeFailureReason.substring(0, 1000);
         }
 
         /*
-         * Insert the failure record only once per event ID.
-         * Duplicate events will not create duplicate investigations.
+         * Record each event only once.
+         * A duplicate event must not create a duplicate investigation.
          */
         int inserted = failedEventRecordRepository.insertIfNotExists(
                 eventId,
@@ -94,17 +98,18 @@ public class FailedEventRecoveryService {
         }
 
         /*
-         * Create an investigation only when the transaction
+         * Create an investigation only when a valid transaction
          * and its organization have been identified.
          */
         if (existingTransactionId != null && orgId != null) {
 
-            String summary = "Kafka event processing failed. Event ID: "
-                    + eventId
-                    + ". Reason: "
-                    + (safeFailureReason == null
-                    ? "No failure details available"
-                    : safeFailureReason);
+            String summary =
+                    "Kafka event processing failed. Event ID: "
+                            + eventId
+                            + ". Reason: "
+                            + (safeFailureReason == null
+                            ? "No failure details available"
+                            : safeFailureReason);
 
             investigationService.createInvestigation(
                     existingTransactionId,
@@ -118,3 +123,4 @@ public class FailedEventRecoveryService {
         return true;
     }
 }
+

@@ -1,7 +1,6 @@
 package com.payflow.payflow_backend.service;
 
 import com.payflow.payflow_backend.entity.ExternalPaymentRecord;
-import com.payflow.payflow_backend.entity.Investigation;
 import com.payflow.payflow_backend.entity.InvestigationIssueType;
 import com.payflow.payflow_backend.entity.InvestigationPriority;
 import com.payflow.payflow_backend.entity.ReconciliationRecord;
@@ -12,6 +11,9 @@ import com.payflow.payflow_backend.repository.ExternalPaymentRecordRepository;
 import com.payflow.payflow_backend.repository.InvestigationRepository;
 import com.payflow.payflow_backend.repository.ReconciliationRecordRepository;
 import com.payflow.payflow_backend.repository.TransactionRepository;
+import com.payflow.payflow_backend.security.TenantContext;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -47,6 +49,16 @@ class ReconciliationServiceTest {
     @InjectMocks
     private ReconciliationService reconciliationService;
 
+    @BeforeEach
+    void setUpTenantContext() {
+        TenantContext.setOrgId(1L);
+    }
+
+    @AfterEach
+    void clearTenantContext() {
+        TenantContext.clear();
+    }
+
     @Test
     void shouldReturnMatchedWhenRecordsMatch() {
 
@@ -71,7 +83,7 @@ class ReconciliationServiceTest {
         externalRecord.setGateway("GATEWAY_A");
         externalRecord.setProcessedAt(LocalDateTime.now());
 
-        when(transactionRepository.findById(transactionId))
+        when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
                 .thenReturn(Optional.of(transaction));
 
         when(externalPaymentRecordRepository
@@ -81,39 +93,24 @@ class ReconciliationServiceTest {
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
                 .thenAnswer(invocation -> {
-
                     ReconciliationRecord record =
                             invocation.getArgument(0);
-
                     record.setId(100L);
-
                     return record;
                 });
 
         ReconciliationRecord result =
-                reconciliationService
-                        .reconcileTransaction(transactionId);
+                reconciliationService.reconcileTransaction(transactionId);
 
-        assertEquals(
-                ReconciliationStatus.MATCHED,
-                result.getStatus());
-
-        assertEquals(
-                transactionId,
-                result.getTransactionId());
-
-        assertEquals(
-                orgId,
-                result.getOrgId());
-
+        assertEquals(ReconciliationStatus.MATCHED, result.getStatus());
+        assertEquals(transactionId, result.getTransactionId());
+        assertEquals(orgId, result.getOrgId());
         assertEquals(
                 new BigDecimal("9999.00"),
                 result.getInternalAmount());
-
         assertEquals(
                 new BigDecimal("9999.00"),
                 result.getExternalAmount());
-
         assertNull(result.getMismatchReason());
 
         verify(investigationService, never())
@@ -150,7 +147,7 @@ class ReconciliationServiceTest {
         externalRecord.setGateway("GATEWAY_A");
         externalRecord.setProcessedAt(LocalDateTime.now());
 
-        when(transactionRepository.findById(transactionId))
+        when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
                 .thenReturn(Optional.of(transaction));
 
         when(externalPaymentRecordRepository
@@ -160,35 +157,23 @@ class ReconciliationServiceTest {
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
                 .thenAnswer(invocation -> {
-
                     ReconciliationRecord record =
                             invocation.getArgument(0);
-
                     record.setId(100L);
-
                     return record;
                 });
 
         when(investigationRepository
-                .findTopByTransactionIdOrderByCreatedAtDesc(
-                        transactionId))
+                .findTopByOrgIdAndTransactionIdOrderByCreatedAtDesc(
+                        orgId, transactionId))
                 .thenReturn(Optional.empty());
 
         ReconciliationRecord result =
-                reconciliationService
-                        .reconcileTransaction(transactionId);
+                reconciliationService.reconcileTransaction(transactionId);
 
-        assertEquals(
-                ReconciliationStatus.MISMATCH,
-                result.getStatus());
-
-        assertEquals(
-                orgId,
-                result.getOrgId());
-
-        assertEquals(
-                "Amount mismatch.",
-                result.getMismatchReason());
+        assertEquals(ReconciliationStatus.MISMATCH, result.getStatus());
+        assertEquals(orgId, result.getOrgId());
+        assertEquals("Amount mismatch.", result.getMismatchReason());
 
         verify(investigationService)
                 .createInvestigation(
@@ -213,7 +198,7 @@ class ReconciliationServiceTest {
         transaction.setCurrency("INR");
         transaction.setStatus(TransactionStatus.SUCCESS);
 
-        when(transactionRepository.findById(transactionId))
+        when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
                 .thenReturn(Optional.of(transaction));
 
         when(externalPaymentRecordRepository
@@ -223,35 +208,26 @@ class ReconciliationServiceTest {
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
                 .thenAnswer(invocation -> {
-
                     ReconciliationRecord record =
                             invocation.getArgument(0);
-
                     record.setId(100L);
-
                     return record;
                 });
 
         when(investigationRepository
-                .findTopByTransactionIdOrderByCreatedAtDesc(
-                        transactionId))
+                .findTopByOrgIdAndTransactionIdOrderByCreatedAtDesc(
+                        orgId, transactionId))
                 .thenReturn(Optional.empty());
 
         ReconciliationRecord result =
-                reconciliationService
-                        .reconcileTransaction(transactionId);
+                reconciliationService.reconcileTransaction(transactionId);
 
         assertEquals(
                 ReconciliationStatus.MISSING_EXTERNAL,
                 result.getStatus());
 
-        assertEquals(
-                transactionId,
-                result.getTransactionId());
-
-        assertEquals(
-                orgId,
-                result.getOrgId());
+        assertEquals(transactionId, result.getTransactionId());
+        assertEquals(orgId, result.getOrgId());
 
         assertEquals(
                 new BigDecimal("9999.00"),
@@ -274,7 +250,7 @@ class ReconciliationServiceTest {
     }
 
     @Test
-    void shouldReturnMissingInternalWhenExternalRecordHasNoInternalTransaction() {
+    void shouldRejectUnmatchedExternalRecordWithoutVerifiedOrganization() {
 
         Long externalRecordId = 2L;
 
@@ -289,132 +265,90 @@ class ReconciliationServiceTest {
         externalRecord.setGateway("GATEWAY_B");
         externalRecord.setProcessedAt(LocalDateTime.now());
 
-        when(externalPaymentRecordRepository
-                .findById(externalRecordId))
+        when(externalPaymentRecordRepository.findById(externalRecordId))
                 .thenReturn(Optional.of(externalRecord));
 
-        when(reconciliationRecordRepository.save(
-                any(ReconciliationRecord.class)))
-                .thenAnswer(invocation -> {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> reconciliationService.reconcileExternalRecord(
+                        externalRecordId));
 
-                    ReconciliationRecord record =
-                            invocation.getArgument(0);
+        verify(reconciliationRecordRepository, never())
+                .save(any(ReconciliationRecord.class));
 
-                    record.setId(100L);
-
-                    return record;
-                });
-
-        when(investigationRepository
-                .findTopByTransactionIdOrderByCreatedAtDesc(
-                        isNull()))
-                .thenReturn(Optional.empty());
-
-        ReconciliationRecord result =
-                reconciliationService
-                        .reconcileExternalRecord(
-                                externalRecordId);
-
-        assertEquals(
-                ReconciliationStatus.MISSING_INTERNAL,
-                result.getStatus());
-
-        assertNull(result.getTransactionId());
-
-        assertNull(result.getOrgId());
-
-        assertEquals(
-                externalRecordId,
-                result.getExternalRecordId());
-
-        assertEquals(
-                new BigDecimal("1500.00"),
-                result.getExternalAmount());
-
-        assertEquals(
-                "No matching internal transaction found",
-                result.getMismatchReason());
-
-        verify(investigationService)
+        verify(investigationService, never())
                 .createInvestigation(
-                        isNull(),
-                        isNull(),
-                        anyLong(),
-                        eq(InvestigationPriority.HIGH),
-                        eq(InvestigationIssueType.MISSING_INTERNAL),
-                        eq("No matching internal transaction found"));
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any(),
+                        any());
     }
 
     @Test
     void shouldReturnLatestReconciliation() {
 
         Long transactionId = 7L;
+        Long orgId = 1L;
 
-        ReconciliationRecord record =
-                new ReconciliationRecord();
+        Transaction transaction = new Transaction();
+        transaction.setId(transactionId);
+        transaction.setOrgId(orgId);
+        transaction.setAmount(new BigDecimal("9999.00"));
+        transaction.setCurrency("INR");
+        transaction.setStatus(TransactionStatus.SUCCESS);
 
+        ReconciliationRecord record = new ReconciliationRecord();
         record.setId(100L);
+        record.setOrgId(orgId);
         record.setTransactionId(transactionId);
-        record.setStatus(
-                ReconciliationStatus.MATCHED);
+        record.setStatus(ReconciliationStatus.MATCHED);
+
+        when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
+                .thenReturn(Optional.of(transaction));
 
         when(reconciliationRecordRepository
-                .findTopByTransactionIdOrderByReconciledAtDesc(
-                        transactionId))
+                .findTopByOrgIdAndTransactionIdOrderByReconciledAtDesc(
+                        orgId, transactionId))
                 .thenReturn(Optional.of(record));
 
         Optional<ReconciliationRecord> result =
-                reconciliationService
-                        .getLatestReconciliation(
-                                transactionId);
+                reconciliationService.getLatestReconciliation(transactionId);
 
         assertTrue(result.isPresent());
-
-        assertEquals(
-                100L,
-                result.get().getId());
-
-        assertEquals(
-                ReconciliationStatus.MATCHED,
-                result.get().getStatus());
+        assertEquals(100L, result.get().getId());
+        assertEquals(ReconciliationStatus.MATCHED, result.get().getStatus());
+        assertEquals(orgId, result.get().getOrgId());
     }
 
     @Test
     void shouldReturnReconciliationsByStatus() {
 
-        ReconciliationRecord record1 =
-                new ReconciliationRecord();
-
+        ReconciliationRecord record1 = new ReconciliationRecord();
         record1.setId(100L);
-        record1.setStatus(
-                ReconciliationStatus.MISMATCH);
+        record1.setOrgId(1L);
+        record1.setStatus(ReconciliationStatus.MISMATCH);
 
-        ReconciliationRecord record2 =
-                new ReconciliationRecord();
-
+        ReconciliationRecord record2 = new ReconciliationRecord();
         record2.setId(101L);
-        record2.setStatus(
-                ReconciliationStatus.MISMATCH);
+        record2.setOrgId(1L);
+        record2.setStatus(ReconciliationStatus.MISMATCH);
 
         when(reconciliationRecordRepository
-                .findByStatusOrderByReconciledAtDesc(
-                        ReconciliationStatus.MISMATCH))
-                .thenReturn(
-                        List.of(record1, record2));
+                .findByOrgIdAndStatusOrderByReconciledAtDesc(
+                        1L, ReconciliationStatus.MISMATCH))
+                .thenReturn(List.of(record1, record2));
 
         List<ReconciliationRecord> result =
-                reconciliationService
-                        .getByStatus(
-                                ReconciliationStatus.MISMATCH);
+                reconciliationService.getByStatus(
+                        ReconciliationStatus.MISMATCH);
 
         assertEquals(2, result.size());
-
-        assertEquals(
-                100L,
-                result.get(0).getId());
-
-        assertEquals(
-                101L,
-                result.get(1).getId());
+        assertEquals(100L, result.get(0).getId());
+        assertEquals(101L, result.get(1).getId());
+        assertEquals(1L, result.get(0).getOrgId());
+        assertEquals(1L, result.get(1).getOrgId());
     }
 }
+

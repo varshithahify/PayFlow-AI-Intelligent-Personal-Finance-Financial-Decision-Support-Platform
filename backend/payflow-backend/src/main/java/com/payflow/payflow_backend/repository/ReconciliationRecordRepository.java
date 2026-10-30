@@ -10,6 +10,7 @@ import java.util.Optional;
 public interface ReconciliationRecordRepository
         extends JpaRepository<ReconciliationRecord, Long> {
 
+    // Existing queries — retain for compatibility with existing workflows.
     Optional<ReconciliationRecord>
     findTopByTransactionIdOrderByReconciledAtDesc(
             Long transactionId);
@@ -17,4 +18,33 @@ public interface ReconciliationRecordRepository
     List<ReconciliationRecord>
     findByStatusOrderByReconciledAtDesc(
             ReconciliationStatus status);
+
+    // Tenant-scoped queries.
+    Optional<ReconciliationRecord>
+    findByIdAndOrgId(
+            Long id,
+            Long orgId);
+
+    Optional<ReconciliationRecord>
+    findTopByOrgIdAndTransactionIdOrderByReconciledAtDesc(
+            Long orgId,
+            Long transactionId);
+
+    List<ReconciliationRecord>
+    findByOrgIdAndStatusOrderByReconciledAtDesc(
+            Long orgId,
+            ReconciliationStatus status);
+
+    Optional<ReconciliationRecord>
+    findByIdAndOrgIdAndTransactionId(
+            Long id,
+            Long orgId,
+            Long transactionId);
+
+    Optional<ReconciliationRecord>
+    findByIdAndOrgIdAndExternalRecordId(
+            Long id,
+            Long orgId,
+            Long externalRecordId);
 }
+

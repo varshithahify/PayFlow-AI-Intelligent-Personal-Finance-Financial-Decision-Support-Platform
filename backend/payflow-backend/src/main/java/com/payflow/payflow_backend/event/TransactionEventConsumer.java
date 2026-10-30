@@ -26,6 +26,7 @@ public class TransactionEventConsumer {
     public TransactionEventConsumer(
             ReconciliationService reconciliationService,
             ProcessedEventService processedEventService) {
+
         this.reconciliationService = reconciliationService;
         this.processedEventService = processedEventService;
     }
@@ -37,8 +38,19 @@ public class TransactionEventConsumer {
     )
     public void consume(TransactionEvent event) {
 
+        if (event == null
+                || event.getEventId() == null
+                || event.getEventType() == null
+                || event.getOrgId() == null) {
+
+            throw new IllegalArgumentException(
+                    "Transaction event, event ID, event type, "
+                            + "and organization ID are required");
+        }
+
         logger.info(
-                "Received transaction event: eventId={}, transactionId={}, eventType={}, status={}, orgId={}",
+                "Received transaction event: eventId={}, transactionId={}, "
+                        + "eventType={}, status={}, orgId={}",
                 event.getEventId(),
                 event.getTransactionId(),
                 event.getEventType(),
@@ -46,11 +58,12 @@ public class TransactionEventConsumer {
                 event.getOrgId()
         );
 
-        boolean claimed =
-                processedEventService.tryMarkAsProcessed(
-                        event.getEventId(),
-                        event.getEventType().name(),
-                        event.getOrgId());
+        // Claim the event inside the consumer's transaction.
+        boolean claimed = processedEventService.tryMarkAsProcessed(
+                event.getEventId(),
+                event.getEventType().name(),
+                event.getOrgId()
+        );
 
         if (!claimed) {
             logger.info(
@@ -60,15 +73,18 @@ public class TransactionEventConsumer {
             return;
         }
 
+        // Reconciliation must succeed before the transaction commits.
         switch (event.getEventType()) {
             case SUCCESS:
             case FAILED:
-                logger.info(
-                        "Triggering reconciliation for transactionId={}",
+                if (event.getTransactionId() == null) {
+                    throw new IllegalArgumentException(
+                            "Transaction ID is required for reconciliation events");
+                }
+
+                reconciliationService.reconcileTransaction(
                         event.getTransactionId()
                 );
-                reconciliationService.reconcileTransaction(
-                        event.getTransactionId());
                 break;
 
             case CREATED:
@@ -81,8 +97,9 @@ public class TransactionEventConsumer {
         }
 
         logger.info(
-                "Marked event as processed: eventId={}",
+                "Successfully processed transaction event: eventId={}",
                 event.getEventId()
         );
     }
 }
+
