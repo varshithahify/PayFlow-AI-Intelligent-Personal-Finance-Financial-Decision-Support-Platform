@@ -1,0 +1,75 @@
+/* Mobile transaction table */
+
+@media (max-width: 480px) {
+
+  .transaction-explorer .transactions-panel .table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .transaction-explorer .transactions-panel .table-wrapper table {
+    min-width: 680px;
+    width: 680px;
+  }
+
+  /* Keep Details column accessible while scrolling */
+
+  .transaction-explorer .transactions-panel th:last-child,
+  .transaction-explorer .transactions-panel td:last-child {
+    position: sticky;
+    right: 0;
+    background: #ffffff;
+    box-shadow: -5px 0 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .transaction-explorer .transactions-panel th:last-child {
+    background: #f8f8fc;
+    z-index: 3;
+  }
+
+  .transaction-explorer .transactions-panel td:last-child {
+    z-index: 2;
+  }
+
+  /* Pagination layout */
+
+  .transaction-pagination {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 12px;
+  }
+
+  .pagination-size {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .transaction-pagination > span {
+    text-align: center;
+    white-space: normal;
+  }
+
+  .pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .pagination-controls button {
+    min-height: 36px;
+  }
+
+  .pagination-controls > span {
+    white-space: nowrap;
+  }
+}

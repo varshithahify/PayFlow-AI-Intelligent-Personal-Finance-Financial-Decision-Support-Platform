@@ -1,11 +1,23 @@
-﻿
-const API_BASE_URL = (
+﻿const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8081'
 ).replace(/\/+$/, '')
 
+// Callback for handling expired or invalid authentication.
+let unauthorizedHandler = null
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler
+}
+
 export async function apiRequest(
   path,
-  { method = 'GET', token, body, headers = {} } = {},
+  {
+    method = 'GET',
+    token,
+    body,
+    headers = {},
+    requiresAuth = true,
+  } = {},
 ) {
   const requestHeaders = {
     Accept: 'application/json',
@@ -16,8 +28,15 @@ export async function apiRequest(
     requestHeaders['Content-Type'] = 'application/json'
   }
 
-  if (token) {
-    requestHeaders.Authorization = `Bearer ${token}`
+  // Automatically retrieve JWT for authenticated requests.
+  const authToken = token || (
+    requiresAuth
+      ? sessionStorage.getItem('accessToken')
+      : null
+  )
+
+  if (authToken) {
+    requestHeaders.Authorization = `Bearer ${authToken}`
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -27,11 +46,17 @@ export async function apiRequest(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    // Automatically handle expired or invalid JWT.
+    if (requiresAuth && response.status === 401) {
+      unauthorizedHandler?.()
+    }
 
-    throw new Error(
+    const message = await response.text()
+    const error = new Error(
       message || `API request failed with status ${response.status}`,
     )
+    error.status = response.status
+    throw error
   }
 
   if (response.status === 204) {
@@ -47,53 +72,108 @@ export async function apiRequest(
   return response.text()
 }
 
+// Authentication APIs
 export const authApi = {
   login: (credentials) =>
     apiRequest('/auth/login', {
       method: 'POST',
       body: credentials,
+      requiresAuth: false,
     }),
 
   register: (registration) =>
     apiRequest('/auth/register', {
       method: 'POST',
       body: registration,
+      requiresAuth: false,
     }),
 }
 
+// Transaction APIs
 export const transactionApi = {
+  // Fetch all transactions (existing endpoint).
   getAll: (token) =>
     apiRequest('/api/transactions', { token }),
 
+  // Fetch paginated transactions with server-side filters and sorting.
+  getPage: (
+    {
+      page = 0,
+      size = 10,
+      search = '',
+      status = '',
+      paymentMethod = '',
+      sortBy = 'createdAt',
+      direction = 'desc',
+    } = {},
+    token,
+  ) => {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+      sortBy,
+      direction,
+    })
+
+    if (search.trim()) {
+      params.set('search', search.trim())
+    }
+
+    if (status) {
+      params.set('status', status)
+    }
+
+    if (paymentMethod) {
+      params.set('paymentMethod', paymentMethod)
+    }
+
+    return apiRequest(
+      `/api/transactions/page?${params.toString()}`,
+      { token },
+    )
+  },
+
+  // Fetch individual transaction details.
   getById: (id, token) =>
     apiRequest(`/api/transactions/${id}`, { token }),
 }
 
+// Reconciliation APIs
 export const reconciliationApi = {
-  // Retrieve the latest reconciliation record for a transaction.
   getLatestByTransactionId: (transactionId, token) =>
     apiRequest(`/api/reconciliation/transactions/${transactionId}`, {
       token,
     }),
 
-  // Create a reconciliation record for an internal transaction.
   reconcileTransaction: (transactionId, token) =>
     apiRequest(`/api/reconciliation/transactions/${transactionId}`, {
       method: 'POST',
       token,
     }),
 
-  // Create a reconciliation record for an external payment record.
   reconcileExternalRecord: (externalRecordId, token) =>
     apiRequest(`/api/reconciliation/external-records/${externalRecordId}`, {
       method: 'POST',
       token,
     }),
 
-  // Retrieve reconciliation records by status.
   getByStatus: (status, token) =>
     apiRequest(`/api/reconciliation/status/${encodeURIComponent(status)}`, {
       token,
     }),
 }
 
+// Analytics APIs
+export const analyticsApi = {
+  getOverview: () =>
+    apiRequest('/api/analytics/overview'),
+
+  getPaymentTrends: () =>
+    apiRequest('/api/analytics/payment-trends'),
+
+  getPaymentStatus: () =>
+    apiRequest('/api/analytics/payment-status'),
+
+  getGatewayPerformance: () =>
+    apiRequest('/api/analytics/gateway-performance'),
+}

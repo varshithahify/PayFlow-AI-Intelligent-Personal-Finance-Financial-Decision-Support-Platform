@@ -1,7 +1,27 @@
 import { useEffect, useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
+import AnalyticsCharts from './features/analytics/AnalyticsCharts'
+import {
+  loginSuccess,
+  logout as logoutUser,
+} from './features/auth/authSlice'
+import {
+  fetchTransactions,
+  fetchTransactionsPage,
+  fetchTransactionById,
+  clearSelectedTransaction,
+  setPageSize,
+  setPage,
+} from './features/transactions/transactionSlice'
+import {
+  fetchAnalyticsOverview,
+  fetchPaymentTrends,
+  fetchPaymentStatus,
+  fetchGatewayPerformance,
+  clearAnalytics,
+} from './features/analytics/analyticsSlice'
 import {
   authApi,
-  transactionApi,
   reconciliationApi,
 } from './services/api'
 import './App.css'
@@ -22,18 +42,25 @@ const RECONCILIATION_STATUSES = [
 ]
 
 function App() {
-  const [token, setToken] = useState(null)
-  const [userEmail, setUserEmail] = useState('')
+  const dispatch = useDispatch()
+
+  const token = useSelector((state) => state.auth.token)
+  const userEmail = useSelector((state) => state.auth.userEmail)
+
   const [authMode, setAuthMode] = useState('login')
 
   function handleAuthenticated(authToken, email) {
-    setToken(authToken)
-    setUserEmail(email)
+    dispatch(
+      loginSuccess({
+        token: authToken,
+        email,
+      }),
+    )
   }
 
   function handleLogout() {
-    setToken(null)
-    setUserEmail('')
+    dispatch(logoutUser())
+    dispatch(clearAnalytics())
     setAuthMode('login')
   }
 
@@ -307,15 +334,50 @@ function AuthScreen({ mode, onModeChange, onAuthenticated }) {
 function Dashboard({ email, token, onLogout }) {
   const [activePage, setActivePage] = useState('Overview')
 
-  const [transactions, setTransactions] = useState([])
-  const [loadingTransactions, setLoadingTransactions] = useState(true)
-  const [transactionError, setTransactionError] = useState('')
+  const dispatch = useDispatch()
+
+  const {
+    items: transactions,
+    pageItems: paginatedTransactions,
+    page: transactionPage,
+    size: transactionPageSize,
+    totalElements: transactionTotalElements,
+    totalPages: transactionTotalPages,
+    first: isFirstTransactionPage,
+    last: isLastTransactionPage,
+    loading: loadingTransactions,
+    paginationLoading,
+    error: transactionError,
+    selectedTransaction,
+  } = useSelector((state) => state.transactions)
+
+  const {
+    overview,
+    paymentTrends,
+    paymentStatus,
+    gatewayPerformance,
+    loading: loadingAnalytics,
+    error: analyticsError,
+  } = useSelector((state) => state.analytics)
 
   const [refreshVersion, setRefreshVersion] = useState(0)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
+  const [sortBy, setSortBy] = useState('createdAt')
+  const [sortDirection, setSortDirection] = useState('desc')
 
-  const [selectedTransaction, setSelectedTransaction] = useState(null)
+  // Debounce search input to avoid sending a request for every keystroke.
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      dispatch(setPage(0))
+    }, 350)
+
+    return () => clearTimeout(timeoutId)
+  }, [search, dispatch])
+
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
 
@@ -334,49 +396,52 @@ function Dashboard({ email, token, onLogout }) {
   const [reconciliationActionMessage, setReconciliationActionMessage] =
     useState('')
 
-  // Load internal transactions from the backend.
+  // Load internal transactions through Redux.
   useEffect(() => {
-    let cancelled = false
-
-    async function loadTransactions() {
-      setLoadingTransactions(true)
-      setTransactionError('')
-
-      try {
-        const data = await transactionApi.getAll(token)
-
-        const records = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.value)
-            ? data.value
-            : []
-
-        if (!cancelled) {
-          setTransactions(records)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setTransactionError(
-            error.message || 'Unable to load transactions.',
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingTransactions(false)
-        }
-      }
-    }
-
     if (token) {
-      loadTransactions()
-    } else {
-      setLoadingTransactions(false)
+      dispatch(fetchTransactions(token))
     }
+  }, [dispatch, token, refreshVersion])
 
-    return () => {
-      cancelled = true
+  // Load the current transaction page only when the Transactions view is open.
+  useEffect(() => {
+    if (token && activePage === 'Transactions') {
+      dispatch(
+        fetchTransactionsPage({
+          page: transactionPage,
+          size: transactionPageSize,
+          search: debouncedSearch,
+          status: statusFilter,
+          paymentMethod: paymentMethodFilter,
+          sortBy,
+          direction: sortDirection,
+          token,
+        }),
+      )
     }
-  }, [token, refreshVersion])
+  }, [
+    dispatch,
+    token,
+    activePage,
+    transactionPage,
+    transactionPageSize,
+    debouncedSearch,
+    statusFilter,
+    paymentMethodFilter,
+    sortBy,
+    sortDirection,
+    refreshVersion,
+  ])
+
+  // Load analytics data through Redux.
+  useEffect(() => {
+    if (token) {
+      dispatch(fetchAnalyticsOverview())
+      dispatch(fetchPaymentTrends())
+      dispatch(fetchPaymentStatus())
+      dispatch(fetchGatewayPerformance())
+    }
+  }, [dispatch, token])
 
   // Load reconciliation records using the four supported backend statuses.
   useEffect(() => {
@@ -457,6 +522,12 @@ function Dashboard({ email, token, onLogout }) {
     }
   }
 
+  const paymentVolumeDisplay = overview?.paymentVolumeByCurrency
+    ? Object.entries(overview.paymentVolumeByCurrency)
+        .map(([currency, amount]) => formatAmount(amount, currency))
+        .join(' · ')
+    : '—'
+
   function formatDate(date) {
     if (!date) return '—'
 
@@ -475,20 +546,6 @@ function Dashboard({ email, token, onLogout }) {
     })
   }
 
-  const successfulTransactions = transactions.filter(
-    (transaction) => getStatus(transaction) === 'SUCCESS',
-  ).length
-
-  const pendingTransactions = transactions.filter((transaction) =>
-    ['CREATED', 'PROCESSING', 'PENDING'].includes(
-      getStatus(transaction),
-    ),
-  ).length
-
-  const failedTransactions = transactions.filter((transaction) =>
-    ['FAILED', 'REFUNDED'].includes(getStatus(transaction)),
-  ).length
-
   const matchedReconciliations = reconciliations.filter(
     (record) => record.status === 'MATCHED',
   ).length
@@ -505,29 +562,8 @@ function Dashboard({ email, token, onLogout }) {
     (record) => record.status === 'MISSING_INTERNAL',
   ).length
 
-  const normalizedSearch = search.trim().toLowerCase()
-
-  const filteredTransactions = transactions.filter((transaction) => {
-    const transactionId = String(transaction.id ?? '')
-    const searchableId = `txn-${transactionId}`.toLowerCase()
-
-    const matchesSearch =
-      !normalizedSearch ||
-      transactionId.includes(normalizedSearch.replace(/^txn-/, '')) ||
-      searchableId.includes(normalizedSearch) ||
-      String(transaction.paymentMethod || '')
-        .toLowerCase()
-        .includes(normalizedSearch) ||
-      String(transaction.currency || '')
-        .toLowerCase()
-        .includes(normalizedSearch)
-
-    const matchesStatus =
-      statusFilter === 'ALL' ||
-      getStatus(transaction) === statusFilter
-
-    return matchesSearch && matchesStatus
-  })
+  // Filtering is performed by the backend; render the current server page as-is.
+  const filteredTransactions = paginatedTransactions
 
   const filteredReconciliations = reconciliations.filter((record) => {
     if (reconciliationFilter === 'ALL') {
@@ -538,22 +574,20 @@ function Dashboard({ email, token, onLogout }) {
   })
 
   async function openTransaction(transaction) {
-    setSelectedTransaction(transaction)
+    dispatch(clearSelectedTransaction())
     setDetailError('')
     setDetailLoading(true)
 
     try {
-      const detail = await transactionApi.getById(
-        transaction.id,
-        token,
-      )
-
-      if (detail && typeof detail === 'object') {
-        setSelectedTransaction(detail)
-      }
+      await dispatch(
+        fetchTransactionById({
+          id: transaction.id,
+          token,
+        }),
+      ).unwrap()
     } catch (error) {
       setDetailError(
-        error.message || 'Could not load the latest transaction details.',
+        error || 'Could not load the latest transaction details.',
       )
     } finally {
       setDetailLoading(false)
@@ -733,9 +767,11 @@ function Dashboard({ email, token, onLogout }) {
               <MetricCard
                 label="Total transactions"
                 value={
-                  loadingTransactions ? '—' : String(transactions.length)
+                  loadingAnalytics || !overview
+                    ? '—'
+                    : String(overview.totalTransactions)
                 }
-                note="Live backend data"
+                note="All backend transactions"
                 icon="⇄"
                 tone="purple"
               />
@@ -743,9 +779,9 @@ function Dashboard({ email, token, onLogout }) {
               <MetricCard
                 label="Successful payments"
                 value={
-                  loadingTransactions
+                  loadingAnalytics || !overview
                     ? '—'
-                    : String(successfulTransactions)
+                    : String(overview.successfulTransactions)
                 }
                 note="Status: SUCCESS"
                 icon="✓"
@@ -755,9 +791,9 @@ function Dashboard({ email, token, onLogout }) {
               <MetricCard
                 label="Pending payments"
                 value={
-                  loadingTransactions
+                  loadingAnalytics || !overview
                     ? '—'
-                    : String(pendingTransactions)
+                    : String(overview.pendingTransactions)
                 }
                 note="Created or processing"
                 icon="◷"
@@ -765,19 +801,53 @@ function Dashboard({ email, token, onLogout }) {
               />
 
               <MetricCard
-                label="Failed / refunded"
+                label="Failed payments"
                 value={
-                  loadingTransactions
+                  loadingAnalytics || !overview
                     ? '—'
-                    : String(failedTransactions)
+                    : String(overview.failedTransactions)
                 }
-                note="Failed or refunded status"
+                note="Status: FAILED"
                 icon="!"
                 tone="red"
               />
             </section>
 
             <section className="metrics-grid">
+              <MetricCard
+                label="Refunded payments"
+                value={
+                  loadingAnalytics || !overview
+                    ? '—'
+                    : String(overview.refundedTransactions)
+                }
+                note="Status: REFUNDED"
+                icon="↩"
+                tone="orange"
+              />
+
+              <MetricCard
+                label="Success rate"
+                value={
+                  loadingAnalytics || !overview
+                    ? '—'
+                    : `${Number(overview.successRate).toFixed(2)}%`
+                }
+                note="Payment success percentage"
+                icon="%"
+                tone="green"
+              />
+
+              <MetricCard
+                label="Successful payment volume"
+                value={
+                  loadingAnalytics || !overview ? '—' : paymentVolumeDisplay
+                }
+                note="Grouped by currency"
+                icon="₹"
+                tone="purple"
+              />
+
               <MetricCard
                 label="Matched reconciliations"
                 value={
@@ -802,6 +872,9 @@ function Dashboard({ email, token, onLogout }) {
                 tone="red"
               />
             </section>
+
+
+                <AnalyticsCharts />
 
             <section className="content-grid">
               <TransactionTable
@@ -972,18 +1045,68 @@ function Dashboard({ email, token, onLogout }) {
                   <span>Status</span>
                   <select
                     value={statusFilter}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setStatusFilter(event.target.value)
-                    }
+                      dispatch(setPage(0))
+                    }}
                     aria-label="Filter by transaction status"
                   >
-                    <option value="ALL">All statuses</option>
+                    <option value="">All statuses</option>
                     <option value="CREATED">Created</option>
                     <option value="PROCESSING">Processing</option>
-                    <option value="PENDING">Pending</option>
                     <option value="SUCCESS">Success</option>
                     <option value="FAILED">Failed</option>
                     <option value="REFUNDED">Refunded</option>
+                  </select>
+                </label>
+
+                <label className="filter-field">
+                  <span>Payment method</span>
+                  <select
+                    value={paymentMethodFilter}
+                    onChange={(event) => {
+                      setPaymentMethodFilter(event.target.value)
+                      dispatch(setPage(0))
+                    }}
+                    aria-label="Filter by payment method"
+                  >
+                    <option value="">All methods</option>
+                    <option value="UPI">UPI</option>
+                    <option value="CARD">Card</option>
+                    <option value="NET_BANKING">Net banking</option>
+                    <option value="WALLET">Wallet</option>
+                  </select>
+                </label>
+
+                <label className="filter-field">
+                  <span>Sort by</span>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => {
+                      setSortBy(event.target.value)
+                      dispatch(setPage(0))
+                    }}
+                    aria-label="Sort transactions by"
+                  >
+                    <option value="createdAt">Date</option>
+                    <option value="id">Transaction ID</option>
+                    <option value="amount">Amount</option>
+                    <option value="status">Status</option>
+                  </select>
+                </label>
+
+                <label className="filter-field">
+                  <span>Order</span>
+                  <select
+                    value={sortDirection}
+                    onChange={(event) => {
+                      setSortDirection(event.target.value)
+                      dispatch(setPage(0))
+                    }}
+                    aria-label="Sort direction"
+                  >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
                   </select>
                 </label>
               </div>
@@ -992,16 +1115,16 @@ function Dashboard({ email, token, onLogout }) {
                 <div>
                   <h3>All transactions</h3>
                   <p>
-                    {loadingTransactions
+                    {paginationLoading
                       ? 'Loading records from the backend...'
-                      : `${filteredTransactions.length} of ${transactions.length} transaction(s)`}
+                      : `${transactionTotalElements} transaction(s) · Page ${transactionTotalPages === 0 ? 0 : transactionPage + 1} of ${transactionTotalPages}`}
                   </p>
                 </div>
               </div>
 
               <TransactionTable
                 transactions={filteredTransactions}
-                loading={loadingTransactions}
+                loading={paginationLoading}
                 error={transactionError}
                 formatAmount={formatAmount}
                 formatDate={formatDate}
@@ -1010,6 +1133,62 @@ function Dashboard({ email, token, onLogout }) {
                 subtitle=""
                 showHeader={false}
               />
+
+              <div className="table-footer transaction-pagination">
+                <div className="pagination-size">
+                  <label htmlFor="transaction-page-size">Rows per page</label>
+                  <select
+                    id="transaction-page-size"
+                    value={transactionPageSize}
+                    disabled={paginationLoading}
+                    onChange={(event) => {
+                      dispatch(setPageSize(Number(event.target.value)))
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+
+                <span>
+                  {transactionTotalElements === 0
+                    ? 'No transactions'
+                    : `Showing ${transactionPage * transactionPageSize + 1}–${Math.min(
+                        (transactionPage + 1) * transactionPageSize,
+                        transactionTotalElements,
+                      )} of ${transactionTotalElements}`}
+                </span>
+
+                <div className="pagination-controls">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={isFirstTransactionPage || paginationLoading}
+                    onClick={() => {
+                      dispatch(setPage(transactionPage - 1))
+                    }}
+                  >
+                    Previous
+                  </button>
+
+                  <span>
+                    Page {transactionTotalPages === 0 ? 0 : transactionPage + 1}
+                    {' '}of {transactionTotalPages}
+                  </span>
+
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={isLastTransactionPage || paginationLoading}
+                    onClick={() => {
+                      dispatch(setPage(transactionPage + 1))
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </section>
           </>
         ) : activePage === 'Reconciliation' ? (
@@ -1288,7 +1467,7 @@ function Dashboard({ email, token, onLogout }) {
           role="presentation"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
-              setSelectedTransaction(null)
+              dispatch(clearSelectedTransaction())
             }
           }}
         >
@@ -1309,7 +1488,7 @@ function Dashboard({ email, token, onLogout }) {
               <button
                 type="button"
                 className="modal-close"
-                onClick={() => setSelectedTransaction(null)}
+                onClick={() => dispatch(clearSelectedTransaction())}
                 aria-label="Close transaction details"
               >
                 ×

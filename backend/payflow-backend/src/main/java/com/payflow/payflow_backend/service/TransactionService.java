@@ -19,7 +19,10 @@ import com.payflow.payflow_backend.gateway.GatewayResult;
 import com.payflow.payflow_backend.gateway.GatewayRouter;
 import com.payflow.payflow_backend.gateway.PaymentGateway;
 import com.payflow.payflow_backend.repository.TransactionRepository;
+import com.payflow.payflow_backend.repository.TransactionSpecification;
 import com.payflow.payflow_backend.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -126,6 +129,7 @@ public class TransactionService {
                 .equalsIgnoreCase(request.getPaymentMethod());
     }
 
+    // Existing non-paginated method (kept for backward compatibility)
     public List<TransactionResponse> getUserTransactions(
             String email) {
 
@@ -142,6 +146,45 @@ public class TransactionService {
                 .stream()
                 .map(TransactionResponse::new)
                 .toList();
+    }
+
+    // Existing paginated method kept for backward compatibility
+    public Page<TransactionResponse> getUserTransactions(
+            String email,
+            Pageable pageable) {
+
+        return getUserTransactions(
+                email,
+                null,
+                null,
+                null,
+                pageable);
+    }
+
+    // Paginated transaction retrieval with server-side filtering
+    public Page<TransactionResponse> getUserTransactions(
+            String email,
+            String search,
+            TransactionStatus status,
+            String paymentMethod,
+            Pageable pageable) {
+
+        User user = userRepository.findByEmail(email);
+
+        if (user == null) {
+            throw new ResourceNotFoundException("User not found");
+        }
+
+        var specification = TransactionSpecification.filterTransactions(
+                user.getOrgId(),
+                user.getId(),
+                search,
+                status,
+                paymentMethod);
+
+        return transactionRepository
+                .findAll(specification, pageable)
+                .map(TransactionResponse::new);
     }
 
     public TransactionResponse getTransaction(
