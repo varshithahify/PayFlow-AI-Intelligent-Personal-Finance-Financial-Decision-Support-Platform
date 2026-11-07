@@ -2,6 +2,7 @@ package com.payflow.payflow_backend.event;
 
 import com.payflow.payflow_backend.repository.ProcessedEventRepository;
 import com.payflow.payflow_backend.service.ReconciliationService;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -39,11 +41,12 @@ class TransactionEventConsumerTransactionTest {
 
     @Test
     void shouldRollbackProcessedEventWhenReconciliationFails() {
+
         TransactionEvent event = createSuccessEvent(UUID.randomUUID());
 
         doThrow(new RuntimeException("Simulated reconciliation failure"))
                 .when(reconciliationService)
-                .reconcileTransaction(12L);
+                .reconcileTransaction(12L, 1L);
 
         assertThrows(
                 RuntimeException.class,
@@ -57,33 +60,43 @@ class TransactionEventConsumerTransactionTest {
 
     @Test
     void shouldAllowRetryAfterFailureAndIgnoreDuplicateAfterSuccess() {
+
         UUID eventId = UUID.randomUUID();
         TransactionEvent event = createSuccessEvent(eventId);
 
         doThrow(new RuntimeException("Temporary reconciliation failure"))
                 .doReturn(null)
                 .when(reconciliationService)
-                .reconcileTransaction(12L);
+                .reconcileTransaction(12L, 1L);
 
+        // First delivery should fail.
         assertThrows(
                 RuntimeException.class,
                 () -> transactionEventConsumer.consume(event)
         );
 
-        assertFalse(processedEventRepository.existsByEventId(eventId));
+        // Failed processing should roll back the event record.
+        assertFalse(
+                processedEventRepository.existsByEventId(eventId)
+        );
 
+        // Second delivery should succeed.
         transactionEventConsumer.consume(event);
 
-        assertTrue(processedEventRepository.existsByEventId(eventId));
+        assertTrue(
+                processedEventRepository.existsByEventId(eventId)
+        );
 
+        // Third delivery should be ignored as a duplicate.
         transactionEventConsumer.consume(event);
 
         verify(reconciliationService, times(2))
-                .reconcileTransaction(12L);
+                .reconcileTransaction(12L, 1L);
     }
 
     @Test
     void shouldProcessConcurrentDuplicateEventOnlyOnce() throws Exception {
+
         UUID eventId = UUID.randomUUID();
         TransactionEvent event = createSuccessEvent(eventId);
 
@@ -91,6 +104,7 @@ class TransactionEventConsumerTransactionTest {
         CountDownLatch allowReconciliationToFinish = new CountDownLatch(1);
 
         doAnswer(invocation -> {
+
             reconciliationStarted.countDown();
 
             if (!allowReconciliationToFinish.await(10, TimeUnit.SECONDS)) {
@@ -100,11 +114,14 @@ class TransactionEventConsumerTransactionTest {
             }
 
             return null;
-        }).when(reconciliationService).reconcileTransaction(12L);
+
+        }).when(reconciliationService)
+                .reconcileTransaction(12L, 1L);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
+
             Future<?> firstDelivery = executor.submit(
                     () -> transactionEventConsumer.consume(event)
             );
@@ -118,8 +135,7 @@ class TransactionEventConsumerTransactionTest {
                     () -> transactionEventConsumer.consume(event)
             );
 
-            // Let the first transaction finish so the second insert can
-            // resolve its conflict against the committed event ID.
+            // Allow the first transaction to finish.
             allowReconciliationToFinish.countDown();
 
             firstDelivery.get(15, TimeUnit.SECONDS);
@@ -131,10 +147,14 @@ class TransactionEventConsumerTransactionTest {
             );
 
             verify(reconciliationService, times(1))
-                    .reconcileTransaction(12L);
+                    .reconcileTransaction(12L, 1L);
+
         } finally {
+
             allowReconciliationToFinish.countDown();
+
             executor.shutdownNow();
+
             assertTrue(
                     executor.awaitTermination(5, TimeUnit.SECONDS),
                     "Executor should shut down"
@@ -143,6 +163,7 @@ class TransactionEventConsumerTransactionTest {
     }
 
     private TransactionEvent createSuccessEvent(UUID eventId) {
+
         TransactionEvent event = new TransactionEvent(
                 12L,
                 3L,
@@ -156,6 +177,7 @@ class TransactionEventConsumerTransactionTest {
         );
 
         event.setEventId(eventId);
+
         return event;
     }
 }

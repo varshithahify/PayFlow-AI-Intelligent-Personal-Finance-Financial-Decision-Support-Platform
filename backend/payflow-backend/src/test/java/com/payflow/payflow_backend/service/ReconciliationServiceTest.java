@@ -26,6 +26,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -82,13 +85,16 @@ class ReconciliationServiceTest {
         externalRecord.setStatus("SUCCESS");
         externalRecord.setGateway("GATEWAY_A");
         externalRecord.setProcessedAt(LocalDateTime.now());
+        externalRecord.setOrgId(orgId);
 
         when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
                 .thenReturn(Optional.of(transaction));
 
-        when(externalPaymentRecordRepository
-                .findByInternalTransactionId(transactionId))
-                .thenReturn(Optional.of(externalRecord));
+       when(externalPaymentRecordRepository
+        .findAllByOrgIdAndInternalTransactionIdOrderByProcessedAtDesc(
+                orgId,
+                transactionId))
+        .thenReturn(List.of(externalRecord));
 
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
@@ -135,7 +141,6 @@ class ReconciliationServiceTest {
         transaction.setAmount(new BigDecimal("9999.00"));
         transaction.setCurrency("INR");
         transaction.setStatus(TransactionStatus.SUCCESS);
-
         ExternalPaymentRecord externalRecord =
                 new ExternalPaymentRecord();
 
@@ -146,14 +151,16 @@ class ReconciliationServiceTest {
         externalRecord.setStatus("SUCCESS");
         externalRecord.setGateway("GATEWAY_A");
         externalRecord.setProcessedAt(LocalDateTime.now());
+        externalRecord.setOrgId(orgId);
 
         when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
                 .thenReturn(Optional.of(transaction));
 
         when(externalPaymentRecordRepository
-                .findByInternalTransactionId(transactionId))
-                .thenReturn(Optional.of(externalRecord));
-
+        .findAllByOrgIdAndInternalTransactionIdOrderByProcessedAtDesc(
+                orgId,
+                transactionId))
+        .thenReturn(List.of(externalRecord));
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
                 .thenAnswer(invocation -> {
@@ -202,8 +209,10 @@ class ReconciliationServiceTest {
                 .thenReturn(Optional.of(transaction));
 
         when(externalPaymentRecordRepository
-                .findByInternalTransactionId(transactionId))
-                .thenReturn(Optional.empty());
+        .findAllByOrgIdAndInternalTransactionIdOrderByProcessedAtDesc(
+                orgId,
+                transactionId))
+        .thenReturn(List.of());
 
         when(reconciliationRecordRepository.save(
                 any(ReconciliationRecord.class)))
@@ -264,7 +273,7 @@ class ReconciliationServiceTest {
         externalRecord.setStatus("SUCCESS");
         externalRecord.setGateway("GATEWAY_B");
         externalRecord.setProcessedAt(LocalDateTime.now());
-
+        externalRecord.setOrgId(1L);
         when(externalPaymentRecordRepository.findById(externalRecordId))
                 .thenReturn(Optional.of(externalRecord));
 
@@ -285,6 +294,67 @@ class ReconciliationServiceTest {
                         any(),
                         any());
     }
+
+    @Test
+void shouldRejectMultipleExternalRecordsForSameTransaction() {
+
+    Long transactionId = 7L;
+    Long orgId = 1L;
+
+    Transaction transaction = new Transaction();
+    transaction.setId(transactionId);
+    transaction.setOrgId(orgId);
+    transaction.setAmount(new BigDecimal("9999.00"));
+    transaction.setCurrency("INR");
+    transaction.setStatus(TransactionStatus.SUCCESS);
+
+    ExternalPaymentRecord record1 = new ExternalPaymentRecord();
+    record1.setId(1L);
+    record1.setOrgId(orgId);
+    record1.setInternalTransactionId(transactionId);
+    record1.setAmount(new BigDecimal("9999.00"));
+    record1.setCurrency("INR");
+    record1.setStatus("SUCCESS");
+    record1.setGateway("GATEWAY_A");
+    record1.setProcessedAt(LocalDateTime.now());
+
+    ExternalPaymentRecord record2 = new ExternalPaymentRecord();
+    record2.setId(2L);
+    record2.setOrgId(orgId);
+    record2.setInternalTransactionId(transactionId);
+    record2.setAmount(new BigDecimal("8999.00"));
+    record2.setCurrency("INR");
+    record2.setStatus("SUCCESS");
+    record2.setGateway("GATEWAY_B");
+    record2.setProcessedAt(LocalDateTime.now());
+
+    when(transactionRepository.findByIdAndOrgId(transactionId, orgId))
+            .thenReturn(Optional.of(transaction));
+
+    when(externalPaymentRecordRepository
+            .findAllByOrgIdAndInternalTransactionIdOrderByProcessedAtDesc(
+                    orgId,
+                    transactionId))
+            .thenReturn(List.of(record1, record2));
+
+    assertThrows(
+            IllegalStateException.class,
+            () -> reconciliationService.reconcileTransaction(transactionId)
+    );
+
+    verify(reconciliationRecordRepository, never())
+            .save(any(ReconciliationRecord.class));
+
+    verify(investigationService, never())
+            .createInvestigation(
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any(),
+                    any()
+            );
+}
 
     @Test
     void shouldReturnLatestReconciliation() {

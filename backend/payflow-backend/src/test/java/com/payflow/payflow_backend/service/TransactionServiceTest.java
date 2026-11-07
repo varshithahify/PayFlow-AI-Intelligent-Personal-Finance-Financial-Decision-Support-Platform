@@ -19,6 +19,11 @@ import com.payflow.payflow_backend.gateway.GatewayRouter;
 import com.payflow.payflow_backend.gateway.PaymentGateway;
 import com.payflow.payflow_backend.repository.TransactionRepository;
 import com.payflow.payflow_backend.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -80,8 +85,7 @@ class TransactionServiceTest {
     @BeforeEach
     void setUp() {
 
-        when(user.getId())
-                .thenReturn(USER_ID);
+        lenient().when(user.getId()).thenReturn(USER_ID);
 
         /*
          * Existing payment-processing tests should continue
@@ -1034,4 +1038,510 @@ class TransactionServiceTest {
 
         return request;
     }
+
+    // Transaction creation
+
+    @Test
+    void shouldCreateNewTransactionSuccessfully() {
+
+        TransactionRequest request = createRequest();
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository
+                .findByOrgIdAndUserIdAndIdempotencyKey(
+                        ORG_ID, USER_ID, "new-key"))
+                .thenReturn(Optional.empty());
+
+        when(transactionRepository.save(any(Transaction.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionResponse response =
+                transactionService.createTransaction(
+                        request, EMAIL, " new-key ");
+
+        assertNotNull(response);
+
+        ArgumentCaptor<Transaction> transactionCaptor =
+                ArgumentCaptor.forClass(Transaction.class);
+
+        verify(transactionRepository).save(transactionCaptor.capture());
+
+        Transaction saved = transactionCaptor.getValue();
+
+        assertEquals(TransactionStatus.CREATED, saved.getStatus());
+        assertEquals("new-key", saved.getIdempotencyKey());
+        assertEquals(USER_ID, saved.getUserId());
+        assertEquals(ORG_ID, saved.getOrgId());
+
+        verify(transactionEventProducer).publish(
+                argThat(event ->
+                        event.getEventType() == TransactionEventType.CREATED
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectMissingIdempotencyKey() {
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> transactionService.createTransaction(
+                        createRequest(), EMAIL, null)
+        );
+
+        verifyNoInteractions(userRepository);
+        verifyNoInteractions(transactionRepository);
+    }
+
+    @Test
+    void shouldRejectBlankIdempotencyKey() {
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> transactionService.createTransaction(
+                        createRequest(), EMAIL, "   ")
+        );
+
+        verifyNoInteractions(userRepository);
+        verifyNoInteractions(transactionRepository);
+    }
+
+    @Test
+    void shouldRejectTransactionCreationWhenUserDoesNotExist() {
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> transactionService.createTransaction(
+                        createRequest(), EMAIL, "key-123")
+        );
+
+        verify(transactionRepository, never())
+                .save(any(Transaction.class));
+    }
+
+    // Non-paginated transaction retrieval
+
+    @Test
+    void shouldReturnUserTransactions() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.SUCCESS,
+                        "key-1");
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository
+                .findByOrgIdAndUserIdOrderByCreatedAtDesc(
+                        ORG_ID, USER_ID))
+                .thenReturn(List.of(transaction));
+
+        List<TransactionResponse> responses =
+                transactionService.getUserTransactions(EMAIL);
+
+        assertNotNull(responses);
+        assertEquals(1, responses.size());
+
+        verify(transactionRepository)
+                .findByOrgIdAndUserIdOrderByCreatedAtDesc(
+                        ORG_ID, USER_ID);
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenUserHasNoTransactions() {
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository
+                .findByOrgIdAndUserIdOrderByCreatedAtDesc(
+                        ORG_ID, USER_ID))
+                .thenReturn(List.of());
+
+        List<TransactionResponse> responses =
+                transactionService.getUserTransactions(EMAIL);
+
+        assertNotNull(responses);
+        assertTrue(responses.isEmpty());
+    }
+
+    @Test
+    void shouldRejectTransactionListingWhenUserDoesNotExist() {
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> transactionService.getUserTransactions(EMAIL)
+        );
+
+        verify(transactionRepository, never())
+                .findByOrgIdAndUserIdOrderByCreatedAtDesc(
+                        anyLong(), anyLong());
+    }
+
+    // Paginated transaction retrieval
+
+    @Test
+    void shouldReturnPaginatedUserTransactions() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.SUCCESS,
+                        "key-1");
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        Page<Transaction> transactionPage =
+                new PageImpl<>(
+                        List.of(transaction),
+                        pageable,
+                        1
+                );
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository.findAll(
+                any(Specification.class),
+                eq(pageable)))
+                .thenReturn(transactionPage);
+
+        Page<TransactionResponse> response =
+                transactionService.getUserTransactions(
+                        EMAIL,
+                        null,
+                        null,
+                        null,
+                        pageable
+                );
+
+        assertNotNull(response);
+        assertEquals(1, response.getTotalElements());
+        assertEquals(1, response.getContent().size());
+
+        verify(transactionRepository)
+                .findAll(any(Specification.class), eq(pageable));
+    }
+
+    @Test
+    void shouldRejectPaginatedTransactionListingWhenUserDoesNotExist() {
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> transactionService.getUserTransactions(
+                        EMAIL,
+                        null,
+                        null,
+                        null,
+                        pageable
+                )
+        );
+
+        verify(transactionRepository, never())
+                .findAll(
+                        any(Specification.class),
+                        any(Pageable.class)
+                );
+    }
+
+    // Transaction cache
+
+    @Test
+    void shouldReturnTransactionFromCache() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.SUCCESS,
+                        "key-1");
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(transactionCacheService.getCachedTransaction(
+                USER_ID, TRANSACTION_ID))
+                .thenReturn(transaction);
+
+        TransactionResponse response =
+                transactionService.getTransaction(
+                        TRANSACTION_ID, EMAIL);
+
+        assertNotNull(response);
+
+        verify(transactionRepository, never())
+                .findById(TRANSACTION_ID);
+
+        verify(transactionCacheService, never())
+                .cacheTransaction(
+                        anyLong(),
+                        anyLong(),
+                        any(Transaction.class)
+                );
+    }
+
+    @Test
+    void shouldFetchTransactionFromDatabaseWhenCacheMisses() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.SUCCESS,
+                        "key-1");
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionCacheService.getCachedTransaction(
+                USER_ID, TRANSACTION_ID))
+                .thenReturn(null);
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        TransactionResponse response =
+                transactionService.getTransaction(
+                        TRANSACTION_ID, EMAIL);
+
+        assertNotNull(response);
+
+        verify(transactionCacheService)
+                .cacheTransaction(
+                        USER_ID,
+                        TRANSACTION_ID,
+                        transaction
+                );
+    }
+
+    @Test
+    void shouldRejectTransactionRetrievalWhenUserDoesNotExist() {
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(null);
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> transactionService.getTransaction(
+                        TRANSACTION_ID, EMAIL)
+        );
+
+        verifyNoInteractions(transactionCacheService);
+    }
+
+    // Transaction status updates
+
+    @Test
+    void shouldMarkProcessingTransactionAsSuccessful() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.PROCESSING,
+                        "key-1");
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository.save(transaction))
+                .thenReturn(transaction);
+
+        TransactionResponse response =
+                transactionService.markSuccess(
+                        TRANSACTION_ID, EMAIL);
+
+        assertNotNull(response);
+        assertEquals(
+                TransactionStatus.SUCCESS,
+                transaction.getStatus()
+        );
+
+        verify(transactionCacheService)
+                .evictTransaction(USER_ID, TRANSACTION_ID);
+
+        verify(transactionEventProducer).publish(
+                argThat(event ->
+                        event.getEventType() == TransactionEventType.SUCCESS
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectMarkingSuccessWhenTransactionIsNotProcessing() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.CREATED,
+                        "key-1");
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionService.markSuccess(
+                        TRANSACTION_ID, EMAIL)
+        );
+
+        verify(transactionRepository, never())
+                .save(any(Transaction.class));
+    }
+
+    @Test
+    void shouldMarkProcessingTransactionAsFailed() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.PROCESSING,
+                        "key-1");
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        when(transactionRepository.save(transaction))
+                .thenReturn(transaction);
+
+        TransactionResponse response =
+                transactionService.markFailed(
+                        TRANSACTION_ID, EMAIL);
+
+        assertNotNull(response);
+        assertEquals(
+                TransactionStatus.FAILED,
+                transaction.getStatus()
+        );
+
+        verify(transactionCacheService)
+                .evictTransaction(USER_ID, TRANSACTION_ID);
+
+        verify(transactionEventProducer).publish(
+                argThat(event ->
+                        event.getEventType() == TransactionEventType.FAILED
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectMarkingFailedWhenTransactionIsNotProcessing() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.SUCCESS,
+                        "key-1");
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> transactionService.markFailed(
+                        TRANSACTION_ID, EMAIL)
+        );
+
+        verify(transactionRepository, never())
+                .save(any(Transaction.class));
+    }
+
+    // Transaction deletion
+
+    @Test
+    void shouldDeleteOwnedTransactionSuccessfully() {
+
+        Transaction transaction =
+                createTransaction(
+                        TRANSACTION_ID,
+                        TransactionStatus.CREATED,
+                        "key-1");
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.of(transaction));
+
+        when(userRepository.findByEmail(EMAIL))
+                .thenReturn(user);
+
+        when(user.getOrgId())
+                .thenReturn(ORG_ID);
+
+        assertDoesNotThrow(
+                () -> transactionService.deleteTransaction(
+                        TRANSACTION_ID, EMAIL)
+        );
+
+        verify(transactionRepository).delete(transaction);
+
+        verify(transactionCacheService)
+                .evictTransaction(USER_ID, TRANSACTION_ID);
+    }
+
+    @Test
+    void shouldRejectDeletingTransactionThatDoesNotExist() {
+
+        when(transactionRepository.findById(TRANSACTION_ID))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> transactionService.deleteTransaction(
+                        TRANSACTION_ID, EMAIL)
+        );
+
+        verify(transactionRepository, never())
+                .delete(any(Transaction.class));
+    }
+
 }

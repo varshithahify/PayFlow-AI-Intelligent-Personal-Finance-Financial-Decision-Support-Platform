@@ -2,6 +2,7 @@ package com.payflow.payflow_backend.event;
 
 import com.payflow.payflow_backend.service.ProcessedEventService;
 import com.payflow.payflow_backend.service.ReconciliationService;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -38,6 +39,7 @@ public class TransactionEventConsumer {
     )
     public void consume(TransactionEvent event) {
 
+        // Validate the incoming event.
         if (event == null
                 || event.getEventId() == null
                 || event.getEventType() == null
@@ -45,7 +47,8 @@ public class TransactionEventConsumer {
 
             throw new IllegalArgumentException(
                     "Transaction event, event ID, event type, "
-                            + "and organization ID are required");
+                            + "and organization ID are required"
+            );
         }
 
         logger.info(
@@ -65,6 +68,7 @@ public class TransactionEventConsumer {
                 event.getOrgId()
         );
 
+        // Skip events that have already been processed.
         if (!claimed) {
             logger.info(
                     "Skipping already processed event: eventId={}",
@@ -73,26 +77,35 @@ public class TransactionEventConsumer {
             return;
         }
 
-        // Reconciliation must succeed before the transaction commits.
+        // Process the event according to its type.
         switch (event.getEventType()) {
+
             case SUCCESS:
             case FAILED:
+
                 if (event.getTransactionId() == null) {
                     throw new IllegalArgumentException(
-                            "Transaction ID is required for reconciliation events");
+                            "Transaction ID is required for reconciliation events"
+                    );
                 }
 
+                // Pass the organization ID explicitly because
+                // Kafka consumers do not have HTTP tenant context.
                 reconciliationService.reconcileTransaction(
-                        event.getTransactionId()
+                        event.getTransactionId(),
+                        event.getOrgId()
                 );
+
                 break;
 
             case CREATED:
             case PROCESSING:
+
                 logger.debug(
                         "No reconciliation required for eventType={}",
                         event.getEventType()
                 );
+
                 break;
         }
 
@@ -102,4 +115,3 @@ public class TransactionEventConsumer {
         );
     }
 }
-

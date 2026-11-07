@@ -27,15 +27,16 @@ public class ExternalPaymentSimulatorService {
                 "EXT-" + UUID.randomUUID();
 
         ExternalPaymentRecord externalRecord =
-                new ExternalPaymentRecord(
-                        externalTransactionId,
-                        transaction.getId(),
-                        transaction.getAmount(),
-                        transaction.getCurrency(),
-                        transaction.getStatus().name(),
-                        gateway,
-                        LocalDateTime.now()
-                );
+        new ExternalPaymentRecord(
+                externalTransactionId,
+                transaction.getId(),
+                transaction.getOrgId(),
+                transaction.getAmount(),
+                transaction.getCurrency(),
+                transaction.getStatus().name(),
+                gateway,
+                LocalDateTime.now()
+        );
 
         return externalPaymentRecordRepository.save(externalRecord);
     }

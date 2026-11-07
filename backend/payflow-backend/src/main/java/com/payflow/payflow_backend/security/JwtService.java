@@ -89,13 +89,20 @@ public class JwtService {
 
     public boolean isTokenValid(String token) {
 
-        try {
-            extractEmail(token);
-            extractOrgId(token);
-            extractRole(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+    try {
+        String email = extractEmail(token);
+        Long orgId = extractOrgId(token);
+        String role = extractRole(token);
+
+        return email != null
+                && !email.isBlank()
+                && orgId != null
+                && orgId > 0
+                && role != null
+                && !role.isBlank();
+
+    } catch (Exception e) {
+        return false;
     }
+}
 }

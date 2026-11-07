@@ -37,3 +37,7 @@ application-local.properties
 
 payflow-fraud/dataset/
 
+# Test and performance reports
+frontend/playwright-report/
+frontend/test-results/
+frontend/lighthouse-report.html

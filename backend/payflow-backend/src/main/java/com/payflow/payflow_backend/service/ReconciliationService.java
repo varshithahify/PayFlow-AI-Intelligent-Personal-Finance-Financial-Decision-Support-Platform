@@ -79,10 +79,26 @@ public class ReconciliationService {
                 transactionId,
                 expectedOrgId);
 
-        ExternalPaymentRecord externalRecord =
-                externalPaymentRecordRepository
-                        .findByInternalTransactionId(transactionId)
-                        .orElse(null);
+        List<ExternalPaymentRecord> externalRecords =
+        externalPaymentRecordRepository
+                .findAllByOrgIdAndInternalTransactionIdOrderByProcessedAtDesc(
+                        expectedOrgId,
+                        transactionId
+                );
+
+if (externalRecords.isEmpty()) {
+    // No external record exists.
+    // Continue with the existing MISSING_EXTERNAL logic.
+} else if (externalRecords.size() > 1) {
+    throw new IllegalStateException(
+            "Multiple external payment records found for transaction: "
+                    + transactionId
+                    + ". Manual investigation is required."
+    );
+}
+
+ExternalPaymentRecord externalRecord =
+        externalRecords.isEmpty() ? null : externalRecords.get(0);
 
         if (externalRecord == null) {
 

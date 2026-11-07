@@ -30,6 +30,9 @@ public class ExternalPaymentRecord {
     @Column(name = "internal_transaction_id")
     private Long internalTransactionId;
 
+    @Column(name = "org_id", nullable = false)
+    private Long orgId;
+
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
 
@@ -51,6 +54,7 @@ public class ExternalPaymentRecord {
     public ExternalPaymentRecord(
             String externalTransactionId,
             Long internalTransactionId,
+            Long orgId,
             BigDecimal amount,
             String currency,
             String status,
@@ -59,6 +63,7 @@ public class ExternalPaymentRecord {
 
         this.externalTransactionId = externalTransactionId;
         this.internalTransactionId = internalTransactionId;
+        this.orgId = orgId;
         this.amount = amount;
         this.currency = currency;
         this.status = status;
@@ -103,12 +108,19 @@ public class ExternalPaymentRecord {
     }
 
     public void setExternalTransactionId(String externalTransactionId) {
-        this.externalTransactionId = externalTransactionId;
-    }
-
+    this.externalTransactionId = externalTransactionId;
+}
     public void setInternalTransactionId(Long internalTransactionId) {
         this.internalTransactionId = internalTransactionId;
     }
+
+    public Long getOrgId() {
+    return orgId;
+}
+
+    public void setOrgId(Long orgId) {
+    this.orgId = orgId;
+}
 
     public void setAmount(BigDecimal amount) {
         this.amount = amount;

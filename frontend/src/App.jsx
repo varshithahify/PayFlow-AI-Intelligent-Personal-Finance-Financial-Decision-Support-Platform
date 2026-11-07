@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import AnalyticsCharts from './features/analytics/AnalyticsCharts'
+const AnalyticsCharts = lazy(
+  () => import('./features/analytics/AnalyticsCharts')
+)
 import {
   loginSuccess,
   logout as logoutUser,
@@ -874,7 +876,15 @@ function Dashboard({ email, token, onLogout }) {
             </section>
 
 
-                <AnalyticsCharts />
+                <Suspense
+  fallback={
+    <section className="analytics-loading panel">
+      Loading analytics charts...
+    </section>
+  }
+>
+  <AnalyticsCharts />
+</Suspense>
 
             <section className="content-grid">
               <TransactionTable

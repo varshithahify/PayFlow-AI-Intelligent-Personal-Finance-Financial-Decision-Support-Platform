@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.payflow.payflow_backend.ai.dto.AIInvestigationContext;
 import com.payflow.payflow_backend.ai.dto.AIInvestigationResponse;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.net.URI;
@@ -34,18 +36,34 @@ public class AIInvestigationService {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
 
+    // Production constructor.
+    @Autowired
     public AIInvestigationService(
             AIInvestigationContextService contextService,
             AIInvestigationFindingService findingService,
             ObjectMapper objectMapper) {
 
+        this(
+                contextService,
+                findingService,
+                objectMapper,
+                HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(15))
+                        .build()
+        );
+    }
+
+    // Injectable constructor for unit testing.
+    AIInvestigationService(
+            AIInvestigationContextService contextService,
+            AIInvestigationFindingService findingService,
+            ObjectMapper objectMapper,
+            HttpClient httpClient) {
+
         this.contextService = contextService;
         this.findingService = findingService;
         this.objectMapper = objectMapper;
-
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
+        this.httpClient = httpClient;
     }
 
     public AIInvestigationResponse investigate(Long transactionId) {
@@ -55,16 +73,18 @@ public class AIInvestigationService {
                 transactionId
         );
 
-        // Step 1: Build context using tenant-scoped database queries.
+        // Build verified investigation context.
         AIInvestigationContext context =
                 contextService.buildContext(transactionId);
 
-        // Step 2: Serialize the verified context.
+        // Serialize the context.
         String contextJson;
 
         try {
             contextJson = objectMapper.writeValueAsString(context);
+
         } catch (JsonProcessingException exception) {
+
             log.error(
                     "Failed to serialize investigation context for transaction {}",
                     transactionId,
@@ -77,7 +97,7 @@ public class AIInvestigationService {
             );
         }
 
-        // Step 3: Prepare the investigation prompt.
+        // Prepare the system prompt.
         String systemPrompt = """
                 You are PayFlow AI, a payment reconciliation
                 investigation assistant.
@@ -117,7 +137,8 @@ public class AIInvestigationService {
                 """.formatted(contextJson);
 
         try {
-            // Step 4: Build the Ollama request.
+
+            // Build the Ollama request.
             var requestBody = objectMapper.createObjectNode();
 
             requestBody.put("model", MODEL);
@@ -142,10 +163,11 @@ public class AIInvestigationService {
                     .timeout(Duration.ofMinutes(5))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(
-                            objectMapper.writeValueAsString(requestBody)))
+                            objectMapper.writeValueAsString(requestBody)
+                    ))
                     .build();
 
-            // Step 5: Call Ollama.
+            // Call Ollama.
             log.info(
                     "Calling Ollama model {} for transaction {}",
                     MODEL,
@@ -172,7 +194,7 @@ public class AIInvestigationService {
                 );
             }
 
-            // Step 6: Extract the generated message.
+            // Extract the generated message.
             JsonNode root = objectMapper.readTree(
                     httpResponse.body()
             );
@@ -190,34 +212,36 @@ public class AIInvestigationService {
 
             String generatedJson = contentNode.asText().trim();
 
-            // Handle Markdown fences if the model returns them.
+            // Handle Markdown JSON fences.
             if (generatedJson.startsWith("```")) {
+
                 generatedJson = generatedJson
                         .replaceFirst("^```(?:json)?\\s*", "")
                         .replaceFirst("\\s*```$", "")
                         .trim();
             }
 
-            // Step 7: Parse the AI response.
+            // Parse the AI response.
             AIInvestigationResponse response =
                     objectMapper.readValue(
                             generatedJson,
                             AIInvestigationResponse.class
                     );
 
-            // Step 8: Validate the response.
+            // Validate the AI response.
             validateResponse(response);
 
-            // Step 9: Ensure an investigation exists.
+            // Verify that an investigation exists.
             Long investigationId = context.investigationId();
 
             if (investigationId == null) {
+
                 throw new IllegalStateException(
                         "Cannot save AI finding because no investigation exists"
                 );
             }
 
-            // Step 10: Persist the AI finding in PostgreSQL.
+            // Persist the AI finding.
             log.info(
                     "Saving AI finding for transaction {} and investigation {}",
                     transactionId,
@@ -235,7 +259,6 @@ public class AIInvestigationService {
                     transactionId
             );
 
-            // Step 11: Return the AI response.
             return response;
 
         } catch (IOException exception) {
@@ -272,12 +295,14 @@ public class AIInvestigationService {
     private void validateResponse(AIInvestigationResponse response) {
 
         if (response == null) {
+
             throw new IllegalStateException(
                     "AI returned an empty investigation response"
             );
         }
 
         if (!StringUtils.hasText(response.likelyCause())) {
+
             throw new IllegalStateException(
                     "AI response is missing the likely cause"
             );
@@ -293,6 +318,7 @@ public class AIInvestigationService {
         }
 
         if (!response.requiresHumanReview()) {
+
             throw new IllegalStateException(
                     "AI investigation must require human review"
             );
@@ -319,6 +345,7 @@ public class AIInvestigationService {
                 .anyMatch(value -> !StringUtils.hasText(value));
 
         if (containsBlankValue) {
+
             throw new IllegalStateException(
                     "AI response contains a blank value in "
                             + fieldName
@@ -326,4 +353,3 @@ public class AIInvestigationService {
         }
     }
 }
-

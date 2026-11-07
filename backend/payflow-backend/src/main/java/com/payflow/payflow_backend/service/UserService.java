@@ -4,6 +4,7 @@ import com.payflow.payflow_backend.dto.UserRequest;
 import com.payflow.payflow_backend.dto.UserResponse;
 import com.payflow.payflow_backend.entity.User;
 import com.payflow.payflow_backend.repository.UserRepository;
+import com.payflow.payflow_backend.security.TenantContext;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -26,13 +27,21 @@ public class UserService {
 
     public UserResponse createUser(UserRequest request) {
 
+        Long orgId = TenantContext.requireOrgId();
+
+        // Email is globally unique in the current application.
+        if (userRepository.findByEmail(request.getEmail()) != null) {
+            throw new IllegalArgumentException("Email already registered");
+        }
+
         String hashedPassword =
                 passwordEncoder.encode(request.getPassword());
 
         User user = new User(
                 request.getName(),
                 request.getEmail(),
-                hashedPassword
+                hashedPassword,
+                orgId
         );
 
         User savedUser = userRepository.save(user);
@@ -42,7 +51,9 @@ public class UserService {
 
     public List<UserResponse> getAllUsers() {
 
-        return userRepository.findAll()
+        Long orgId = TenantContext.requireOrgId();
+
+        return userRepository.findAllByOrgId(orgId)
                 .stream()
                 .map(UserResponse::new)
                 .toList();
@@ -50,12 +61,10 @@ public class UserService {
 
     public UserResponse getUserByEmail(String email) {
 
-        User user = userRepository.findByEmail(email);
+        Long orgId = TenantContext.requireOrgId();
 
-        if (user == null) {
-            return null;
-        }
-
-        return new UserResponse(user);
+        return userRepository.findByEmailAndOrgId(email, orgId)
+                .map(UserResponse::new)
+                .orElse(null);
     }
 }

@@ -1,10 +1,17 @@
 package com.payflow.payflow_backend.repository;
 
 import com.payflow.payflow_backend.entity.User;
-
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+import java.util.List;
+import java.util.Optional;
 
-    User findByEmail(String email);
+public interface UserRepository extends JpaRepository<User, Long> {
+User findByEmail(String email);
+
+List<User> findAllByOrgId(Long orgId);
+
+Optional<User> findByEmailAndOrgId(String email, Long orgId);
+
+
 }
