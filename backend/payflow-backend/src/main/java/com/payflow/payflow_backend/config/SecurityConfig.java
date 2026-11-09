@@ -28,127 +28,129 @@ import java.util.List;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-private final JwtAuthenticationFilter jwtAuthenticationFilter;
-private final UserRepository userRepository;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final UserRepository userRepository;
 
-public SecurityConfig(
-        JwtAuthenticationFilter jwtAuthenticationFilter,
-        UserRepository userRepository
-) {
-    this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-    this.userRepository = userRepository;
-}
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            UserRepository userRepository
+    ) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.userRepository = userRepository;
+    }
 
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
 
-    configuration.setAllowedOrigins(
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOrigins(
         List.of(
                 "http://127.0.0.1:5173",
                 "http://localhost:5173",
                 "http://127.0.0.1:4173",
-                "http://localhost:4173"
+                "http://localhost:4173",
+                "http://127.0.0.1:3000",
+                "http://localhost:3000"
         )
 );
 
-    configuration.setAllowedMethods(
-            List.of(
-                    "GET",
-                    "POST",
-                    "PUT",
-                    "PATCH",
-                    "DELETE",
-                    "OPTIONS"
-            )
-    );
-
-    configuration.setAllowedHeaders(
-            List.of(
-                    "Authorization",
-                    "Content-Type",
-                    "Accept",
-                    "Idempotency-Key"
-            )
-    );
-
-    configuration.setAllowCredentials(false);
-    configuration.setMaxAge(3600L);
-
-    UrlBasedCorsConfigurationSource source =
-            new UrlBasedCorsConfigurationSource();
-
-    source.registerCorsConfiguration("/**", configuration);
-
-    return source;
-}
-
-@Bean
-public SecurityFilterChain securityFilterChain(
-        HttpSecurity http
-) throws Exception {
-
-    http
-            .cors(cors -> {})
-            .csrf(csrf -> csrf.disable())
-
-            .sessionManagement(session ->
-                    session.sessionCreationPolicy(
-                            SessionCreationPolicy.STATELESS
-                    )
-            )
-
-            .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(
-                            "/auth/register",
-                            "/auth/login",
-                            "/actuator/health",
-                            "/error"
-                    ).permitAll()
-
-                    .anyRequest().authenticated()
-            )
-
-            // Return HTTP 401 when authentication is required
-            // but the request has no valid authentication.
-            .exceptionHandling(exception -> exception
-                    .authenticationEntryPoint(
-                            new HttpStatusEntryPoint(
-                                    HttpStatus.UNAUTHORIZED
-                            )
-                    )
-            )
-
-            .addFilterBefore(
-                    jwtAuthenticationFilter,
-                    UsernamePasswordAuthenticationFilter.class
-            );
-
-    return http.build();
-}
-
-@Bean
-public UserDetailsService userDetailsService() {
-
-    return username -> {
-
-        User user = userRepository.findByEmail(username);
-
-        if (user == null) {
-            throw new UsernameNotFoundException(
-                    "User not found: " + username
-            );
-        }
-
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password(user.getPasswordHash())
-                .authorities(
-                        "ROLE_" + user.getRole().name()
+        configuration.setAllowedMethods(
+                List.of(
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "OPTIONS"
                 )
-                .build();
-    };
-}
+        );
 
+        configuration.setAllowedHeaders(
+                List.of(
+                        "Authorization",
+                        "Content-Type",
+                        "Accept",
+                        "Idempotency-Key"
+                )
+        );
 
+        configuration.setAllowCredentials(false);
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http
+    ) throws Exception {
+
+        http
+                .cors(cors -> {})
+                .csrf(csrf -> csrf.disable())
+
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
+
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/auth/register",
+                                "/auth/login",
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/error"
+                        ).permitAll()
+
+                        .anyRequest().authenticated()
+                )
+
+                // Return HTTP 401 when authentication is required
+                // but the request has no valid authentication.
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(
+                                new HttpStatusEntryPoint(
+                                        HttpStatus.UNAUTHORIZED
+                                )
+                        )
+                )
+
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
+
+        return http.build();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+
+        return username -> {
+
+            User user = userRepository.findByEmail(username);
+
+            if (user == null) {
+                throw new UsernameNotFoundException(
+                        "User not found: " + username
+                );
+            }
+
+            return org.springframework.security.core.userdetails.User
+                    .withUsername(user.getEmail())
+                    .password(user.getPasswordHash())
+                    .authorities(
+                            "ROLE_" + user.getRole().name()
+                    )
+                    .build();
+        };
+    }
 }

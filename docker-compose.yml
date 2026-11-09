@@ -1,58 +1,248 @@
 services:
 
+  # ==========================================
+  # 1. PostgreSQL Database
+  # ==========================================
   postgres:
     image: postgres:18
     container_name: payflow-postgres
+
     environment:
       POSTGRES_DB: payflow
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
+
     volumes:
       - payflow-postgres-data:/var/lib/postgresql
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d payflow"]
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres -d payflow
       interval: 10s
       timeout: 5s
       retries: 5
 
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 2. Redis
+  # ==========================================
   redis:
     image: redis:7
     container_name: payflow-redis
+
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
+
     volumes:
       - payflow-redis-data:/data
+
     command: redis-server --appendonly yes
+
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD
+        - redis-cli
+        - ping
       interval: 10s
       timeout: 5s
       retries: 5
 
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 3. Apache Kafka (KRaft)
+  # ==========================================
   kafka:
     image: apache/kafka:4.3.1
     container_name: payflow-kafka
+
     ports:
-      - "9094:9094"
-      - "9095:9093"
+      - "127.0.0.1:9094:9094"
+      - "127.0.0.1:9095:9093"
+
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_PROCESS_ROLES: broker,controller
+
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+
       KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://localhost:9092,EXTERNAL://localhost:9094
+
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
     volumes:
       - payflow-kafka-data:/var/lib/kafka/data
+
+    healthcheck:
+      test:
+        - CMD
+        - /opt/kafka/bin/kafka-broker-api-versions.sh
+        - --bootstrap-server
+        - localhost:9092
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    restart: unless-stopped
+
+
+  # ==========================================
+  # 4. Python Fraud Detection Service
+  # ==========================================
+  fraud:
+    build:
+      context: ./payflow-fraud
+      dockerfile: Dockerfile.cpu-candidate
+
+    image: payflow-fraud:1.2
+    container_name: payflow-fraud
+
+    environment:
+      REDIS_URL: redis://redis:6379
+
+    ports:
+      - "127.0.0.1:8083:8083"
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+  # ==========================================
+  # 5. Spring Boot Backend
+  # ==========================================
+  backend:
+    build:
+      context: ./backend/payflow-backend
+      dockerfile: Dockerfile
+    image: payflow-backend:1.1
+
+    environment:
+      SERVER_PORT: 8081
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payflow
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-postgres}
+
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+      FRAUD_SERVICE_URL: http://fraud:8083
+
+      SPRING_AI_OLLAMA_BASE_URL: http://host.docker.internal:11434
+      SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600000}
+
+    ports:
+      - "127.0.0.1:8081:8081"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      fraud:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:8081/actuator/health
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+    restart: unless-stopped
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+  # ==========================================
+  # 6. React Frontend (Nginx)
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    image: payflow-frontend:1.3
+    container_name: payflow-frontend
+
+    ports:
+      - "127.0.0.1:3000:8080"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+
+
+# ==========================================
+# Persistent Volumes
+# ==========================================
 volumes:
   payflow-postgres-data:
   payflow-redis-data:

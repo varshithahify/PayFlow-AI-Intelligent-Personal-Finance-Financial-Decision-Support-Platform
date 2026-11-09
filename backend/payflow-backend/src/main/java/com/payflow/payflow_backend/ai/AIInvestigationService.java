@@ -8,9 +8,10 @@ import com.payflow.payflow_backend.ai.dto.AIInvestigationResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.IOException;
 import java.net.URI;
@@ -26,10 +27,8 @@ public class AIInvestigationService {
     private static final Logger log =
             LoggerFactory.getLogger(AIInvestigationService.class);
 
-    private static final String OLLAMA_URL =
-            "http://localhost:11434/api/chat";
-
-    private static final String MODEL = "llama3.2:3b";
+    private final String ollamaBaseUrl;
+    private final String model;
 
     private final AIInvestigationContextService contextService;
     private final AIInvestigationFindingService findingService;
@@ -37,11 +36,14 @@ public class AIInvestigationService {
     private final HttpClient httpClient;
 
     // Production constructor.
+    // Spring injects Ollama configuration from application.properties.
     @Autowired
     public AIInvestigationService(
             AIInvestigationContextService contextService,
             AIInvestigationFindingService findingService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @Value("${spring.ai.ollama.base-url}") String ollamaBaseUrl,
+            @Value("${spring.ai.ollama.chat.options.model}") String model) {
 
         this(
                 contextService,
@@ -49,21 +51,45 @@ public class AIInvestigationService {
                 objectMapper,
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(15))
-                        .build()
+                        .build(),
+                ollamaBaseUrl,
+                model
         );
     }
 
-    // Injectable constructor for unit testing.
+    // Existing constructor preserved for unit tests.
     AIInvestigationService(
             AIInvestigationContextService contextService,
             AIInvestigationFindingService findingService,
             ObjectMapper objectMapper,
             HttpClient httpClient) {
 
+        this(
+                contextService,
+                findingService,
+                objectMapper,
+                httpClient,
+                "http://localhost:11434",
+                "llama3.2:3b"
+        );
+    }
+
+    // Core constructor.
+    // Allows explicit configuration during testing.
+    AIInvestigationService(
+            AIInvestigationContextService contextService,
+            AIInvestigationFindingService findingService,
+            ObjectMapper objectMapper,
+            HttpClient httpClient,
+            String ollamaBaseUrl,
+            String model) {
+
         this.contextService = contextService;
         this.findingService = findingService;
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
+        this.ollamaBaseUrl = ollamaBaseUrl;
+        this.model = model;
     }
 
     public AIInvestigationResponse investigate(Long transactionId) {
@@ -141,7 +167,7 @@ public class AIInvestigationService {
             // Build the Ollama request.
             var requestBody = objectMapper.createObjectNode();
 
-            requestBody.put("model", MODEL);
+            requestBody.put("model", model);
             requestBody.put("stream", false);
 
             var messages = requestBody.putArray("messages");
@@ -158,8 +184,12 @@ public class AIInvestigationService {
             options.put("num_predict", 400);
             options.put("temperature", 0.1);
 
+            // Construct Ollama API URL dynamically.
+            String ollamaChatUrl =
+                    ollamaBaseUrl.replaceAll("/+$", "") + "/api/chat";
+
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(OLLAMA_URL))
+                    .uri(URI.create(ollamaChatUrl))
                     .timeout(Duration.ofMinutes(5))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(
@@ -170,7 +200,7 @@ public class AIInvestigationService {
             // Call Ollama.
             log.info(
                     "Calling Ollama model {} for transaction {}",
-                    MODEL,
+                    model,
                     transactionId
             );
 

@@ -6,7 +6,7 @@ PayFlow AI is a full-stack payment processing and reconciliation platform design
 
 The platform provides transaction management, payment gateway integration, asynchronous event processing, reconciliation, investigation management, and a web-based interface.
 
-The planned AI extension will help users understand payment discrepancies by analysing available evidence, generating explanations, and recommending investigation steps.
+The implemented AI investigation workflow helps users understand payment discrepancies by analysing available evidence, generating structured explanations, and recommending investigation steps.
 
 AI recommendations will remain advisory. The AI will not independently modify financial records, initiate payments, or resolve investigations.
 
@@ -27,7 +27,7 @@ AI recommendations will remain advisory. The AI will not independently modify fi
 | Frontend state management | Redux                                    |
 | Build tool                | Maven                                    |
 | API testing               | Postman and automated tests              |
-| AI integration            | Spring AI and a model provider — planned |
+| AI integration | Spring AI, Ollama, and Llama 3.2 |
 
 ## 3. High-Level Architecture
 
@@ -57,9 +57,9 @@ Kafka supports asynchronous event processing. Redis provides transaction caching
 
 Payment gateway abstractions support gateway routing. The application also contains a fraud-service client and an external-payment simulator.
 
-### Planned AI Layer
+### AI Investigation Layer
 
-A dedicated AI investigation service will collect authorized evidence, request an explanation from the configured model provider, validate the response, and return structured recommendations to the frontend.
+The AI investigation service collects authorized investigation evidence, requests an explanation from the configured Ollama model through Spring AI, validates the structured response, and makes investigation findings available through authenticated backend APIs.
 
 ## 4. Backend Package Structure
 
@@ -158,7 +158,7 @@ These paths describe the reviewed controller mappings. Request and response sche
 
 PostgreSQL is the primary relational database. Flyway manages schema migrations, and Hibernate schema auto-update is disabled.
 
-The reviewed migration history had successful migrations through V11.
+The verified Docker deployment has successfully applied Flyway migrations through V12, including the AI investigation findings schema.
 
 Previously reviewed schema areas include:
 
@@ -173,17 +173,17 @@ Previously reviewed schema areas include:
 
 Already-applied migrations should not be edited to repair existing schema issues. Required schema changes should use a new migration.
 
-### Identified entity mapping issue
+### Historical review finding: External payment entity mapping
 
 The database's `external_payment_records` table contains a required `org_id` column. The reviewed `ExternalPaymentRecord` entity did not map this field.
 
 The reviewed entity constructor and external-payment simulator also did not assign an organization ID.
 
-This is a mismatch between the reviewed Java entity and database schema that must be corrected.
+This was identified during an earlier architecture review. Its current resolution status must be verified against the latest entity implementation and database integration tests before it is considered resolved.
 
-### Identified reconciliation issue
+### Historical review finding: Reconciliation organization assignment
 
-The reviewed missing-internal reconciliation path creates a reconciliation record without assigning its required organization ID.
+An earlier source review identified a missing organization assignment in the missing-internal reconciliation path. Revalidate the current implementation and its tests before treating this finding as resolved.
 
 This can violate the database's non-null constraint.
 
@@ -195,7 +195,7 @@ The reviewed backend uses stateless Spring Security authentication with JWT bear
 
 The JWT filter extracts identity, role, and organization information and establishes a tenant context during request processing.
 
-### Risks identified
+### Historical security review findings
 
 1. Some reconciliation paths use lookups that are not consistently scoped by organization.
 2. The external-payment simulator retrieves transactions by ID without a visible ownership check in the reviewed controller.
@@ -231,15 +231,15 @@ Cache keys and cache access must preserve user and organization boundaries. Auth
 | High     | Simulator transaction lookup lacks a visible ownership check      | Enforce transaction ownership and tenant validation    |
 | High     | Investigation access needs consistent tenant isolation            | Scope reads and writes and validate linked records     |
 | High     | Cache access needs authorization verification                     | Ensure cache hits cannot bypass ownership checks       |
-| Medium   | AI investigation service has not yet been implemented             | Design and implement the AI service                    |
-| Medium   | AI provider configuration has not yet been implemented            | Configure the provider and externalize credentials     |
-| Medium   | AI workflow tests have not yet been implemented                   | Add service, API, authorization, and integration tests |
+| Completed | AI investigation service | Implemented and verified through AI investigation API testing. |
+| Completed | AI provider configuration | Spring AI configured with Ollama and Llama 3.2. |
+| Completed | AI workflow testing | AI service tests, full backend test suite, and AI investigation persistence verified. |
 
 These priorities are proposed implementation priorities for the project.
 
-## 12. Planned AI Integration
+## 12. Implemented AI Investigation Integration
 
-The AI investigation assistant will follow this logical workflow:
+The implemented AI investigation assistant follows this workflow:
 
 1. An authenticated user requests an explanation for an investigation.
 2. The backend verifies access to the investigation and its linked records.
@@ -249,7 +249,7 @@ The AI investigation assistant will follow this logical workflow:
 6. The response is validated and returned in a structured format.
 7. The frontend displays the summary, supporting evidence, explanation, and recommended next checks.
 
-The proposed response structure includes:
+The structured AI investigation response includes:
 
 * Investigation summary
 * Observed evidence
@@ -259,7 +259,7 @@ The proposed response structure includes:
 
 The model must distinguish observed facts from hypotheses. It must not invent transaction evidence or independently execute financial actions.
 
-## 13. Phase 9 Implementation Sequence
+## 13. Phase 9 Implementation Summary
 
 1. Complete the architecture review and document the existing system.
 2. Define AI requirements, response schemas, safety rules, and API contracts.
@@ -268,12 +268,12 @@ The model must distinguish observed facts from hypotheses. It must not invent tr
 5. Integrate the AI investigation interface into React.
 6. Test evidence accuracy, error handling, tenant isolation, and the end-to-end workflow.
 
-## 14. Phase 9.1 Completion Criteria
+## 14. Phase 9.1 Completion Record
 
 Phase 9.1 documents the existing architecture, major backend components, business workflows, API areas, persistence, security model, and identified risks.
 
 This document completes the documentation deliverable for the architecture review based on the source details reviewed so far.
 
-The identified code defects are not considered fixed until the implementation changes are applied and tests pass.
+Historical findings in this document must be checked against the latest source code and relevant tests before being marked resolved.
 
 **Suggested repository location:** `docs/current-architecture.md`

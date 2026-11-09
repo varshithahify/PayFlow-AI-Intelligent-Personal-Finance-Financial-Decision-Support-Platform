@@ -1,0 +1,25 @@
+# Maven build outputs
+target/
+target_test-classes/
+
+# Logs and diagnostic files
+*.log
+hs_err_pid*.log
+
+# Audit and temporary files
+*-audit.txt
+*-dependencies.txt
+*-error.txt
+*.diff
+
+# IDE files
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# OS files
+.DS_Store
+Thumbs.db

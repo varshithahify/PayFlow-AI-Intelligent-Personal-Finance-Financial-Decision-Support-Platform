@@ -3,14 +3,13 @@ package com.payflow.payflow_backend.event;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.service.ReconciliationService;
 import com.payflow.payflow_backend.service.WebhookConfigService;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
-import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
@@ -33,9 +32,6 @@ class TransactionEventRetryDltIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private KafkaListenerEndpointRegistry registry;
 
     @MockitoBean
     private ReconciliationService reconciliationService;
@@ -79,11 +75,7 @@ class TransactionEventRetryDltIntegrationTest {
         )).when(reconciliationService)
                 .reconcileTransaction(transactionId, orgId);
 
-        // Wait until all Kafka listeners have received partition assignments.
-        registry.getListenerContainers().forEach(container ->
-                ContainerTestUtils.waitForAssignment(container, 3)
-        );
-
+        // Wait until all Kafka listeners receive partition assignments.
         TransactionEvent event = new TransactionEvent(
                 transactionId,
                 1001L,

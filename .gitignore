@@ -1,4 +1,4 @@
-# Java
+﻿# Java
 *.class
 target/
 *.jar
@@ -41,3 +41,7 @@ payflow-fraud/dataset/
 frontend/playwright-report/
 frontend/test-results/
 frontend/lighthouse-report.html
+.env.docker
+
+
+!.env.docker.example

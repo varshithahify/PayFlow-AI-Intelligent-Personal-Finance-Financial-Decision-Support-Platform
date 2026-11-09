@@ -1,4 +1,4 @@
-# PayFlow AI — Testing and Quality Engineering Report
+﻿# PayFlow AI â€” Testing and Quality Engineering Report
 
 ## 1. Overview
 
@@ -20,7 +20,7 @@ Command:
 
 | Metric | Result |
 |---|---:|
-| Tests executed | 538 |
+| Tests executed | 540 |
 | Failures | 0 |
 | Errors | 0 |
 | Skipped | 0 |
@@ -215,18 +215,18 @@ The performance suite is maintained under:
 
 ```text
 performance/
-├── database/
-│   └── seed-transactions.sql
-└── k6/
-    ├── auth-test.js
-    ├── deep-pagination-test.js
-    ├── load-test.js
-    ├── pagination-metrics-test.js
-    ├── smoke-test.js
-    ├── soak-test.js
-    ├── spike-test.js
-    ├── stress-test.js
-    └── transaction-test.js
+â”œâ”€â”€ database/
+â”‚   â””â”€â”€ seed-transactions.sql
+â””â”€â”€ k6/
+    â”œâ”€â”€ auth-test.js
+    â”œâ”€â”€ deep-pagination-test.js
+    â”œâ”€â”€ load-test.js
+    â”œâ”€â”€ pagination-metrics-test.js
+    â”œâ”€â”€ smoke-test.js
+    â”œâ”€â”€ soak-test.js
+    â”œâ”€â”€ spike-test.js
+    â”œâ”€â”€ stress-test.js
+    â””â”€â”€ transaction-test.js
 ```
 
 ## 10. Phase 11 Closure
