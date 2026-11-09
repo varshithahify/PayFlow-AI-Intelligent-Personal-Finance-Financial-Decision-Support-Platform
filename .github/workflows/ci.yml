@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      JWT_SECRET: ${{ secrets.JWT_SECRET_CI }}
+      JWT_SECRET: ci-only-test-secret-not-for-production-0123456789abcdef
 
     steps:
       - name: Checkout repository
