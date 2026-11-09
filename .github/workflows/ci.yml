@@ -68,6 +68,7 @@ jobs:
               POSTGRES_READY=true
               break
             fi
+
             echo "Waiting for PostgreSQL: $i/30"
             sleep 2
           done
@@ -82,6 +83,7 @@ jobs:
               echo "Redis is ready"
               exit 0
             fi
+
             echo "Waiting for Redis: $i/30"
             sleep 2
           done
@@ -307,6 +309,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
+
       - name: Publish Docker images
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
@@ -319,3 +322,49 @@ jobs:
             docker push "$IMAGE_PREFIX/$service:$IMAGE_TAG"
             docker push "$IMAGE_PREFIX/$service:latest"
           done
+
+
+  # ==========================================
+  # FINAL WORKFLOW STATUS
+  # ==========================================
+
+  workflow-status:
+    name: CI Pipeline Status
+    runs-on: ubuntu-latest
+
+    needs:
+      - backend
+      - frontend
+      - fraud-service
+      - docker
+
+    if: always()
+
+    steps:
+      - name: Generate pipeline summary
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          FRAUD_RESULT: ${{ needs['fraud-service'].result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+        run: |
+          {
+            echo "## PayFlow AI - CI/CD Pipeline Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| Backend Tests | $BACKEND_RESULT |"
+            echo "| Frontend Tests | $FRONTEND_RESULT |"
+            echo "| Fraud Service Tests | $FRAUD_RESULT |"
+            echo "| Docker Build and Security Scan | $DOCKER_RESULT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$BACKEND_RESULT" != "success" ] ||
+             [ "$FRONTEND_RESULT" != "success" ] ||
+             [ "$FRAUD_RESULT" != "success" ] ||
+             [ "$DOCKER_RESULT" != "success" ]; then
+            echo "CI/CD pipeline failed. Check the failed jobs."
+            exit 1
+          fi
+
+          echo "All CI/CD jobs completed successfully."
