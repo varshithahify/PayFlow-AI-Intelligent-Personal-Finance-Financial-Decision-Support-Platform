@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: backend/payflow-backend/pom.xml
 
       - name: Start infrastructure
-        run: docker compose up -d postgres redis kafka
+        run: docker compose up -d postgres redis kafka fraud
 
       - name: Wait for Kafka
         run: |
@@ -65,7 +65,6 @@ jobs:
               echo "PostgreSQL is ready"
               break
             fi
-
             sleep 2
           done
 
@@ -76,11 +75,25 @@ jobs:
               echo "Redis is ready"
               exit 0
             fi
-
             sleep 2
           done
 
           echo "Redis failed to start"
+          exit 1
+
+      - name: Wait for fraud service
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8083/health >/dev/null; then
+              echo "Fraud service is ready"
+              exit 0
+            fi
+
+            echo "Waiting for fraud service: $i/60"
+            sleep 3
+          done
+
+          docker logs payflow-fraud || true
           exit 1
 
       - name: Run backend tests
@@ -229,10 +242,6 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "prefix=ghcr.io/$OWNER" >> "$GITHUB_OUTPUT"
 
-      # ==========================================
-      # BUILD DOCKER IMAGES
-      # ==========================================
-
       - name: Build backend image
         run: |
           docker build \
@@ -252,15 +261,10 @@ jobs:
             -t ${{ steps.images.outputs.prefix }}/payflow-fraud:${{ github.sha }} \
             ./payflow-fraud
 
-      # ==========================================
-      # TRIVY SECURITY SCANNING
-      # ==========================================
-
       - name: Scan backend image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.images.outputs.prefix }}/payflow-backend:${{ github.sha }}
-          version: v0.69.3
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
@@ -271,7 +275,6 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.images.outputs.prefix }}/payflow-frontend:${{ github.sha }}
-          version: v0.69.3
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
@@ -282,16 +285,11 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.images.outputs.prefix }}/payflow-fraud:${{ github.sha }}
-          version: v0.69.3
           format: table
           vuln-type: os,library
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-
-      # ==========================================
-      # GITHUB CONTAINER REGISTRY
-      # ==========================================
 
       - name: Login to GitHub Container Registry
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -300,10 +298,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # ==========================================
-      # PUBLISH DOCKER IMAGES
-      # ==========================================
 
       - name: Publish Docker images
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
