@@ -19,6 +19,11 @@ RUN npm run build
 
 FROM nginx:1.29-alpine
 
+# Apply Alpine Linux security updates
+RUN apk update \
+    && apk upgrade --no-cache \
+    && rm -rf /var/cache/apk/*
+
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -2,26 +2,27 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Python runtime settings
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
-RUN groupadd --system --gid 10001 app \
-    && useradd --system --uid 10001 \
-       --gid app --home-dir /app \
-       --shell /usr/sbin/nologin app
+# Apply operating system security updates
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
+# Create non-root application user
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+
+# Install CPU-specific Python dependencies
 COPY requirements.cpu-candidate.txt requirements.txt
-
-RUN pip install --no-cache-dir -r requirements.txt
-
+RUN pip install --no-cache-dir -r requirements.txt && find /usr/local/lib -path '*/pip/_vendor/bom.cdx.json' -delete
+# Copy application and trained model
 COPY --chown=app:app main.py ./main.py
 COPY --chown=app:app model/ ./model/
 
+# Run as non-root
 USER app
 
 EXPOSE 8083
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('redis')=='UP' and d.get('model')=='loaded'"
-
+# Verify application, Redis and model health
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('redis')=='UP' and d.get('model')=='loaded'"
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8083"]

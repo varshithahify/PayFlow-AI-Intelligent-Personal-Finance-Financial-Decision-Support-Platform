@@ -1,47 +1,36 @@
 # ==========================================
-# Stage 1: React Build
+# Python Fraud Detection Service
 # ==========================================
 
-FROM node:24-alpine AS build
+FROM python:3.14-slim
+
+# Python runtime settings
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-COPY package*.json ./
+# Apply operating system security updates
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
-RUN npm ci
-
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && find /usr/local/lib -path '*/pip/_vendor/bom.cdx.json' -delete
+# Copy application source
 COPY . .
 
-ARG VITE_API_BASE_URL=""
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
-RUN npm run build
-
-
-# ==========================================
-# Stage 2: Non-root Nginx Runtime
-# ==========================================
-
-FROM nginx:1.29-alpine
-
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Prepare writable directories for Nginx
-RUN mkdir -p /var/cache/nginx /tmp \
-    && chown -R nginx:nginx /var/cache/nginx /tmp \
-    && sed -i \
-       -e 's|pid /run/nginx.pid;|pid /tmp/nginx.pid;|' \
-       -e 's|^user nginx;|# user nginx;|' \
-       /etc/nginx/nginx.conf
-
+# Create a non-root application user
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
 # Run as non-root
-USER nginx
+USER app
 
-EXPOSE 8080
+# FastAPI service port
+EXPOSE 8083
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -q --spider http://127.0.0.1:8080/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8083/health', timeout=3)" || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+# Start FastAPI
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8083"]
