@@ -1,4 +1,4 @@
-# ==========================================
+﻿# ==========================================
 # Stage 1: Build
 # ==========================================
 
@@ -18,6 +18,11 @@ RUN chmod +x ./mvnw && ./mvnw -B -DskipTests clean package
 # ==========================================
 
 FROM eclipse-temurin:21-jre
+
+# Apply Ubuntu APT security update
+RUN apt-get update \
+    && apt-get install -y --only-upgrade apt \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
