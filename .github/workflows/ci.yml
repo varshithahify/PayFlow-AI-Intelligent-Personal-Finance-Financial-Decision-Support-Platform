@@ -1,4 +1,4 @@
-name: PayFlow AI CI/CD
+﻿name: PayFlow AI CI/CD
 
 on:
   push:
@@ -22,8 +22,9 @@ jobs:
   backend:
     name: Backend Tests
     runs-on: ubuntu-latest
+
     env:
-      JWT_SECRET: ci-only-test-secret-not-for-production-0123456789abcdef
+      JWT_SECRET: ${{ secrets.JWT_SECRET_CI }}
 
     steps:
       - name: Checkout repository
@@ -38,7 +39,7 @@ jobs:
           cache-dependency-path: backend/payflow-backend/pom.xml
 
       - name: Start infrastructure
-        run: docker compose up -d postgres redis kafka
+        run: docker compose up -d postgres redis kafka fraud
 
       - name: Wait for Kafka
         run: |
@@ -47,6 +48,7 @@ jobs:
               echo "Kafka is ready"
               exit 0
             fi
+
             echo "Waiting for Kafka: $i/60"
             sleep 3
           done
@@ -63,6 +65,8 @@ jobs:
               echo "PostgreSQL is ready"
               break
             fi
+
+            echo "Waiting for PostgreSQL: $i/30"
             sleep 2
           done
 
@@ -73,10 +77,30 @@ jobs:
               echo "Redis is ready"
               exit 0
             fi
+
+            echo "Waiting for Redis: $i/30"
             sleep 2
           done
 
           echo "Redis failed to start"
+          exit 1
+
+      - name: Wait for fraud service
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8083/health >/dev/null; then
+              echo "Fraud service is ready"
+              exit 0
+            fi
+
+            echo "Waiting for fraud service: $i/60"
+            sleep 5
+          done
+
+          echo "Fraud service failed to become ready"
+
+          docker logs payflow-fraud || true
+
           exit 1
 
       - name: Run backend tests
