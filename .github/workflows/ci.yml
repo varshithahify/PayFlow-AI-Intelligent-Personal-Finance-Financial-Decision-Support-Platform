@@ -60,25 +60,34 @@ jobs:
         run: |
           docker compose ps
 
+          POSTGRES_READY=false
+
           for i in {1..30}; do
             if docker exec payflow-postgres pg_isready -U postgres -d payflow >/dev/null 2>&1; then
               echo "PostgreSQL is ready"
+              POSTGRES_READY=true
               break
             fi
+            echo "Waiting for PostgreSQL: $i/30"
             sleep 2
           done
 
-          docker exec payflow-postgres pg_isready -U postgres -d payflow
+          if [ "$POSTGRES_READY" != "true" ]; then
+            docker logs payflow-postgres || true
+            exit 1
+          fi
 
           for i in {1..30}; do
             if [ "$(docker exec payflow-redis redis-cli ping)" = "PONG" ]; then
               echo "Redis is ready"
               exit 0
             fi
+            echo "Waiting for Redis: $i/30"
             sleep 2
           done
 
           echo "Redis failed to start"
+          docker logs payflow-redis || true
           exit 1
 
       - name: Wait for fraud service
