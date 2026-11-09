@@ -306,8 +306,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
+          password: ${{ secrets.GHCR_PAT }
       - name: Publish Docker images
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
