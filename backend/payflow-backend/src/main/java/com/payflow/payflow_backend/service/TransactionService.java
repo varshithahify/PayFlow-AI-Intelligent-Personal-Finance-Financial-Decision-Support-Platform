@@ -5,6 +5,7 @@ import com.payflow.payflow_backend.dto.FraudScoreRequest;
 import com.payflow.payflow_backend.dto.FraudScoreResponse;
 import com.payflow.payflow_backend.dto.TransactionRequest;
 import com.payflow.payflow_backend.dto.TransactionResponse;
+import com.payflow.payflow_backend.entity.FraudScore;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
@@ -18,6 +19,7 @@ import com.payflow.payflow_backend.gateway.GatewayHealthService;
 import com.payflow.payflow_backend.gateway.GatewayResult;
 import com.payflow.payflow_backend.gateway.GatewayRouter;
 import com.payflow.payflow_backend.gateway.PaymentGateway;
+import com.payflow.payflow_backend.repository.FraudScoreRepository;
 import com.payflow.payflow_backend.repository.TransactionRepository;
 import com.payflow.payflow_backend.repository.TransactionSpecification;
 import com.payflow.payflow_backend.repository.UserRepository;
@@ -41,6 +43,7 @@ public class TransactionService {
     private final TransactionCacheService transactionCacheService;
     private final FraudServiceClient fraudServiceClient;
     private final FraudAlertProducer fraudAlertProducer;
+    private final FraudScoreRepository fraudScoreRepository;
 
     public TransactionService(
             TransactionRepository transactionRepository,
@@ -50,7 +53,8 @@ public class TransactionService {
             TransactionEventProducer transactionEventProducer,
             TransactionCacheService transactionCacheService,
             FraudServiceClient fraudServiceClient,
-            FraudAlertProducer fraudAlertProducer) {
+            FraudAlertProducer fraudAlertProducer,
+            FraudScoreRepository fraudScoreRepository) {
 
         this.transactionRepository = transactionRepository;
         this.userRepository = userRepository;
@@ -60,6 +64,7 @@ public class TransactionService {
         this.transactionCacheService = transactionCacheService;
         this.fraudServiceClient = fraudServiceClient;
         this.fraudAlertProducer = fraudAlertProducer;
+        this.fraudScoreRepository = fraudScoreRepository;
     }
 
     @Transactional
@@ -256,6 +261,28 @@ public class TransactionService {
             throw new IllegalStateException(
                     "Fraud service returned an empty response");
         }
+
+        /*
+         * Persist the fraud scoring result.
+         * Geo and device scores remain NULL because
+         * the current fraud API does not return them.
+         */
+        FraudScore fraudScore = new FraudScore();
+
+        fraudScore.setTransactionId(transaction.getId());
+        fraudScore.setScore(fraudResponse.getScore());
+        fraudScore.setMlScore(fraudResponse.getMlScore());
+        fraudScore.setVelocityScore(fraudResponse.getVelocityScore());
+
+        List<String> triggeredRules =
+                fraudResponse.getTriggeredRules() == null
+                        ? List.of()
+                        : fraudResponse.getTriggeredRules();
+
+        fraudScore.setTriggeredRules(
+                String.join(", ", triggeredRules));
+
+        fraudScoreRepository.save(fraudScore);
 
         /*
          * Publish an alert only for FLAG and BLOCK decisions.

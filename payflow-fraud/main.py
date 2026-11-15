@@ -4,7 +4,7 @@ import joblib
 import pandas as pd
 import redis
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ---------------------------------------------------------
@@ -23,9 +23,7 @@ REDIS_URL = os.getenv(
 )
 
 VELOCITY_WINDOW_SECONDS = 60 * 60
-
 VELOCITY_LIMIT = 5
-
 HIGH_AMOUNT_LIMIT = 100000
 
 
@@ -61,11 +59,37 @@ redis_client = redis.Redis.from_url(
 
 
 # ---------------------------------------------------------
+# Atomic Redis velocity counter
+# ---------------------------------------------------------
+
+VELOCITY_COUNTER_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+
+return count
+"""
+
+
+# ---------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------
 
 class FraudScoreRequest(BaseModel):
-    transaction_amt: float = Field(..., alias="TransactionAmt")
+
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
+
+    transaction_amt: float = Field(
+        ...,
+        alias="TransactionAmt",
+        gt=0,
+        allow_inf_nan=False
+    )
+
     card1: float | None = None
     card2: float | None = None
     addr1: float | None = None
@@ -78,9 +102,6 @@ class FraudScoreRequest(BaseModel):
 
     card_hash: str | None = None
     email: str | None = None
-
-    class Config:
-        populate_by_name = True
 
 
 class FraudScoreResponse(BaseModel):
@@ -97,10 +118,12 @@ class FraudScoreResponse(BaseModel):
 
 @app.get("/health")
 def health_check():
+
     redis_status = "UP"
 
     try:
         redis_client.ping()
+
     except Exception:
         redis_status = "DOWN"
 
@@ -148,7 +171,7 @@ def score_transaction(request: FraudScoreRequest):
             errors="coerce"
         )
 
-    # Apply the same median values used during training.
+    # Apply training-time median values.
     features = features.fillna(FEATURE_MEDIANS)
 
     # -----------------------------------------------------
@@ -180,25 +203,24 @@ def score_transaction(request: FraudScoreRequest):
         )
 
         try:
-            transaction_count = redis_client.incr(
-                velocity_key
-            )
-
-            if transaction_count == 1:
-                redis_client.expire(
+            transaction_count = int(
+                redis_client.eval(
+                    VELOCITY_COUNTER_SCRIPT,
+                    1,
                     velocity_key,
                     VELOCITY_WINDOW_SECONDS
                 )
+            )
 
             if transaction_count > VELOCITY_LIMIT:
                 velocity_score = 40.0
+
                 triggered_rules.append(
                     "HIGH_VELOCITY"
                 )
 
         except Exception:
-            # Fraud scoring should remain available even
-            # when Redis is temporarily unavailable.
+            # Fraud scoring remains available if Redis fails.
             transaction_count = 0
 
     # -----------------------------------------------------
@@ -206,12 +228,13 @@ def score_transaction(request: FraudScoreRequest):
     # -----------------------------------------------------
 
     if request.transaction_amt > HIGH_AMOUNT_LIMIT:
+
         triggered_rules.append(
             "HIGH_AMOUNT"
         )
 
-        # The guide specifies +20 for high amount.
         amount_score = 20.0
+
     else:
         amount_score = 0.0
 
@@ -219,7 +242,7 @@ def score_transaction(request: FraudScoreRequest):
     # Geographic score
     # -----------------------------------------------------
 
-    # Phase 6 currently has no geographic input.
+    # Geographic features are not implemented yet.
     geo_score = 0.0
 
     # -----------------------------------------------------
@@ -238,14 +261,19 @@ def score_transaction(request: FraudScoreRequest):
         100.0
     )
 
-    # -----------------------------------------------------
+    # -----------------------
     # Fraud action
-    # -----------------------------------------------------
+    # -----------------------
 
     if final_score >= 75:
         action = "BLOCK"
-    elif final_score >= 50:
+
+    elif (
+        final_score >= 50
+        or "HIGH_VELOCITY" in triggered_rules
+    ):
         action = "FLAG"
+
     else:
         action = "ALLOW"
 

@@ -18,9 +18,6 @@ public class TransactionEventConsumer {
     private static final String TRANSACTION_EVENTS_TOPIC =
             "transaction-events";
 
-    private static final String CONSUMER_GROUP =
-            "payflow-group";
-
     private final ReconciliationService reconciliationService;
     private final ProcessedEventService processedEventService;
 
@@ -35,7 +32,7 @@ public class TransactionEventConsumer {
     @Transactional
     @KafkaListener(
             topics = TRANSACTION_EVENTS_TOPIC,
-            groupId = CONSUMER_GROUP
+            groupId = "${app.kafka.transaction-consumer-group:payflow-group}"
     )
     public void consume(TransactionEvent event) {
 

@@ -2,7 +2,9 @@ name: payflow-ai-prod
 
 services:
 
-  # ---------------- POSTGRESQL ----------------
+  # ==========================================
+  # POSTGRESQL - PRESERVED FOR LOCAL/BACKUP USE
+  # ==========================================
   postgres:
     image: postgres:18
     restart: unless-stopped
@@ -18,20 +20,31 @@ services:
       timeout: 5s
       retries: 5
 
-  # ---------------- REDIS ----------------
+  # ==========================================
+  # REDIS
+  # ==========================================
   redis:
     image: redis:7
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - 'exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"'
     volumes:
       - payflow-redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - 'REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG'
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ---------------- KAFKA ----------------
+  # ==========================================
+  # KAFKA
+  # ==========================================
   kafka:
     image: apache/kafka:4.3.1
     restart: unless-stopped
@@ -62,7 +75,9 @@ services:
       retries: 5
       start_period: 30s
 
-  # ---------------- OLLAMA ----------------
+  # ==========================================
+  # OLLAMA
+  # ==========================================
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
@@ -75,61 +90,95 @@ services:
       retries: 5
       start_period: 60s
 
-  # ---------------- FRAUD SERVICE ----------------
+  # ==========================================
+  # OLLAMA MODEL INITIALIZATION
+  # ==========================================
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama pull \"$${OLLAMA_MODEL}\""
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # ==========================================
+  # FRAUD DETECTION SERVICE
+  # ==========================================
   fraud:
     image: ghcr.io/varshithahify/payflow-fraud:0730f69aa1b32e05168478c5afb9e32a568794a0
     restart: unless-stopped
     environment:
-      REDIS_URL: redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     healthcheck:
       test:
         - CMD
         - python
         - -c
-        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('redis')=='UP' and d.get('model')=='loaded'"
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('model')=='loaded'"
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
 
-  # ---------------- SPRING BOOT BACKEND ----------------
+  # ==========================================
+  # SPRING BOOT BACKEND
+  # ==========================================
   backend:
     image: ghcr.io/varshithahify/payflow-backend:0730f69aa1b32e05168478c5afb9e32a568794a0
     restart: unless-stopped
     environment:
       SERVER_PORT: 8081
 
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payflow
-      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:?DB_USERNAME is required}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      # Production profile
+      SPRING_PROFILES_ACTIVE: prod
 
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
+      # Neon PostgreSQL
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://${NEON_DB_HOST}:5432/${NEON_DB_NAME}?sslmode=require"
+      SPRING_DATASOURCE_USERNAME: ${NEON_DB_USERNAME:?NEON_DB_USERNAME is required}
+      SPRING_DATASOURCE_PASSWORD: ${NEON_DB_PASSWORD:?NEON_DB_PASSWORD is required}
 
+      # Redis
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      SPRING_DATA_REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+
+      # Kafka
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
 
+      # Fraud detection
       FRAUD_SERVICE_URL: http://fraud:8083
 
+      # Ollama
       SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
       SPRING_AI_OLLAMA_CHAT_OPTIONS_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
 
+      # JWT
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-3600000}
 
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
         condition: service_healthy
       fraud:
         condition: service_healthy
-      ollama:
-        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
 
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/actuator/health"]
@@ -138,7 +187,9 @@ services:
       retries: 5
       start_period: 60s
 
-  # ---------------- REACT FRONTEND ----------------
+  # ==========================================
+  # REACT FRONTEND + NGINX
+  # ==========================================
   frontend:
     image: ghcr.io/varshithahify/payflow-frontend:0730f69aa1b32e05168478c5afb9e32a568794a0
     restart: unless-stopped
@@ -148,11 +199,16 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/health || exit 1"]
+      test:
+        - CMD-SHELL
+        - "wget -q --spider http://127.0.0.1:8080/health || exit 1"
       interval: 30s
       timeout: 5s
       retries: 3
 
+# ==========================================
+# PERSISTENT VOLUMES
+# ==========================================
 volumes:
   payflow-postgres-data:
   payflow-redis-data:

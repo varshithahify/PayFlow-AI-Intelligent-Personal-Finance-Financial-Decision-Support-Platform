@@ -22,7 +22,7 @@ import java.util.List;
 @Service
 public class AIInvestigationFindingService {
 
-    private static final String MODEL_NAME = "llama3.2:3b";
+    private static final String DEFAULT_MODEL_NAME = "llama3.2:3b";
 
     private final AIInvestigationFindingRepository findingRepository;
     private final InvestigationRepository investigationRepository;
@@ -39,8 +39,7 @@ public class AIInvestigationFindingService {
     }
 
     /**
-     * Saves a validated AI investigation finding for the authenticated
-     * organization.
+     * Backward-compatible method for existing callers and tests.
      */
     @Transactional
     public AIInvestigationFinding saveFinding(
@@ -48,9 +47,33 @@ public class AIInvestigationFindingService {
             Long investigationId,
             AIInvestigationResponse response) {
 
+        return saveFinding(
+                transactionId,
+                investigationId,
+                response,
+                DEFAULT_MODEL_NAME
+        );
+    }
+
+    /**
+     * Saves a validated AI investigation finding for the authenticated
+     * organization and records the actual AI model used.
+     */
+    @Transactional
+    public AIInvestigationFinding saveFinding(
+            Long transactionId,
+            Long investigationId,
+            AIInvestigationResponse response,
+            String modelName) {
+
         if (transactionId == null || investigationId == null) {
             throw new IllegalArgumentException(
                     "Transaction ID and investigation ID are required");
+        }
+
+        if (!StringUtils.hasText(modelName)) {
+            throw new IllegalArgumentException(
+                    "Model name is required");
         }
 
         validateResponse(response);
@@ -74,7 +97,7 @@ public class AIInvestigationFindingService {
         finding.setTransactionId(transactionId);
         finding.setLikelyCause(response.likelyCause());
         finding.setRequiresHumanReview(true);
-        finding.setModelName(MODEL_NAME);
+        finding.setModelName(modelName.trim());
 
         try {
             finding.setEvidence(
@@ -112,16 +135,12 @@ public class AIInvestigationFindingService {
 
         Long orgId = TenantContext.requireOrgId();
 
-        // Verify that the investigation belongs to this organization.
-        // Return 404 without exposing another organization's data.
         investigationRepository
                 .findByIdAndOrgId(investigationId, orgId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Investigation not found"));
 
-        // Retrieve findings scoped to the authenticated organization
-        // and the requested investigation.
         List<AIInvestigationFinding> findings =
                 findingRepository
                         .findByOrgIdAndInvestigationIdOrderByCreatedAtDesc(

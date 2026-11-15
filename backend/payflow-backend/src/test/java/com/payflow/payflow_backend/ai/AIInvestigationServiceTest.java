@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -41,13 +40,15 @@ class AIInvestigationServiceTest {
 
     private static final Long TRANSACTION_ID = 100L;
     private static final Long INVESTIGATION_ID = 200L;
+    private static final String MODEL_NAME = "llama3.2:3b";
 
     @BeforeEach
     void setUp() {
 
         mocks = MockitoAnnotations.openMocks(this);
 
-objectMapper = new ObjectMapper().findAndRegisterModules();
+        objectMapper = new ObjectMapper().findAndRegisterModules();
+
         service = new AIInvestigationService(
                 contextService,
                 findingService,
@@ -110,25 +111,27 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
     }
 
     private void mockSuccessfulOllamaResponse(String generatedContent)
-        throws Exception {
+            throws Exception {
 
-    // Create the root Ollama response.
-    var root = objectMapper.createObjectNode();
+        var root = objectMapper.createObjectNode();
 
-    // Add the nested message.content field.
-    root.putObject("message")
-            .put("content", generatedContent);
+        root.putObject("message")
+                .put("content", generatedContent);
 
-    String ollamaBody = root.toString();
+        String ollamaBody = root.toString();
 
-    when(httpResponse.statusCode()).thenReturn(200);
-    when(httpResponse.body()).thenReturn(ollamaBody);
+        when(httpResponse.statusCode()).thenReturn(200);
+        when(httpResponse.body()).thenReturn(ollamaBody);
 
-    when(httpClient.send(
-            any(),
-            any(HttpResponse.BodyHandler.class)
-    )).thenReturn(httpResponse);
-}
+        when(httpClient.send(
+                any(),
+                any(HttpResponse.BodyHandler.class)
+        )).thenReturn(httpResponse);
+    }
+
+    // ---------------------------------------------------------
+    // SUCCESS TESTS
+    // ---------------------------------------------------------
 
     @Test
     void shouldSuccessfullyInvestigateTransaction() throws Exception {
@@ -150,7 +153,8 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         verify(findingService).saveFinding(
                 eq(TRANSACTION_ID),
                 eq(INVESTIGATION_ID),
-                any(AIInvestigationResponse.class)
+                any(AIInvestigationResponse.class),
+                eq(MODEL_NAME)
         );
     }
 
@@ -174,9 +178,14 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         verify(findingService).saveFinding(
                 eq(TRANSACTION_ID),
                 eq(INVESTIGATION_ID),
-                any()
+                any(AIInvestigationResponse.class),
+                eq(MODEL_NAME)
         );
     }
+
+    // ---------------------------------------------------------
+    // HTTP ERROR TESTS
+    // ---------------------------------------------------------
 
     @Test
     void shouldRejectOllamaHttpError() throws Exception {
@@ -193,12 +202,16 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
                 () -> service.investigate(TRANSACTION_ID)
         );
 
-        assertEquals("Ollama returned HTTP 500", exception.getMessage());
+        assertEquals(
+                "Ollama returned HTTP 500",
+                exception.getMessage()
+        );
 
         verify(findingService, never()).saveFinding(
                 anyLong(),
                 anyLong(),
-                any()
+                any(AIInvestigationResponse.class),
+                anyString()
         );
     }
 
@@ -216,6 +229,13 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
                 "Ollama returned an empty message",
                 exception.getMessage()
         );
+
+        verify(findingService, never()).saveFinding(
+                anyLong(),
+                anyLong(),
+                any(AIInvestigationResponse.class),
+                anyString()
+        );
     }
 
     @Test
@@ -231,9 +251,14 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         verify(findingService, never()).saveFinding(
                 anyLong(),
                 anyLong(),
-                any()
+                any(AIInvestigationResponse.class),
+                anyString()
         );
     }
+
+    // ---------------------------------------------------------
+    // INVESTIGATION VALIDATION TESTS
+    // ---------------------------------------------------------
 
     @Test
     void shouldRejectInvestigationWithoutInvestigationId()
@@ -257,7 +282,8 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         verify(findingService, never()).saveFinding(
                 anyLong(),
                 anyLong(),
-                any()
+                any(AIInvestigationResponse.class),
+                anyString()
         );
     }
 
@@ -341,7 +367,9 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
                 () -> service.investigate(TRANSACTION_ID)
         );
 
-        assertTrue(exception.getMessage().contains("evidence"));
+        assertTrue(
+                exception.getMessage().contains("evidence")
+        );
     }
 
     @Test
@@ -362,7 +390,9 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
                 () -> service.investigate(TRANSACTION_ID)
         );
 
-        assertTrue(exception.getMessage().contains("recommended actions"));
+        assertTrue(
+                exception.getMessage().contains("recommended actions")
+        );
     }
 
     @Test
@@ -383,8 +413,14 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
                 () -> service.investigate(TRANSACTION_ID)
         );
 
-        assertTrue(exception.getMessage().contains("limitations"));
+        assertTrue(
+                exception.getMessage().contains("limitations")
+        );
     }
+
+    // ---------------------------------------------------------
+    // HTTP INTERRUPTION TESTS
+    // ---------------------------------------------------------
 
     @Test
     void shouldRestoreInterruptStatusWhenRequestInterrupted()
@@ -393,7 +429,9 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         when(httpClient.send(
                 any(),
                 any(HttpResponse.BodyHandler.class)
-        )).thenThrow(new InterruptedException("Request interrupted"));
+        )).thenThrow(
+                new InterruptedException("Request interrupted")
+        );
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
@@ -416,7 +454,9 @@ objectMapper = new ObjectMapper().findAndRegisterModules();
         when(httpClient.send(
                 any(),
                 any(HttpResponse.BodyHandler.class)
-        )).thenThrow(new IOException("Connection failed"));
+        )).thenThrow(
+                new IOException("Connection failed")
+        );
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,

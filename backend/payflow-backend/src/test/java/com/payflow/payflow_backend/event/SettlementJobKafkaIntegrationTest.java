@@ -117,6 +117,9 @@ void shouldPublishAndConsumeSettlementEventThroughRealKafka()
                     "Consumer should receive a partition assignment"
             );
 
+            // Initialize the consumer's position before publishing the message.
+            consumer.assignment().forEach(consumer::position);
+
             var sendResult = kafkaTemplate.send(TOPIC, uniqueJobId, event)
                     .get(15, TimeUnit.SECONDS);
 

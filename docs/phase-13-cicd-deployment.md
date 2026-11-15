@@ -298,9 +298,6 @@
 
 # Example commands:
 
-#
-
-# ```powershell
 
 # docker compose --env-file .env.prod -f docker-compose.prod.yml pull
 
@@ -308,19 +305,14 @@
 
 # docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
 
-# ```
 
 #
 
 # Ollama model initialization:
 
-#
-
-# ```powershell
 
 # docker compose --env-file .env.prod -f docker-compose.prod.yml exec ollama ollama pull llama3.2:3b
 
-# ```
 
 #
 
@@ -533,3 +525,12 @@
 #
 
 # Phase 13 is formally complete within the documented scope.
+
+# ==========================================
+# NEON POSTGRESQL — PRODUCTION DATABASE
+# ==========================================
+
+NEON_DB_HOST=ep-noisy-snow-a1jpc1-pooler.ap-southeast-1.aws.neon.tech
+NEON_DB_NAME=neondb
+NEON_DB_USERNAME=neondb_owner
+NEON_DB_PASSWORD=CHANGE_ME

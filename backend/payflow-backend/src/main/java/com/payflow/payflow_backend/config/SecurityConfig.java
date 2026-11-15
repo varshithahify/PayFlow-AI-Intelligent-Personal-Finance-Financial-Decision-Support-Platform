@@ -51,7 +51,9 @@ public class SecurityConfig {
                 "http://127.0.0.1:4173",
                 "http://localhost:4173",
                 "http://127.0.0.1:3000",
-                "http://localhost:3000"
+                "http://localhost:3000",
+		"https://payflow-ai-intelligent-personal-finance-financial-decision-support-platform.pages.dev",
+                "https://payflow-ai-intelligent-personal-finance-financial-decision.pages.dev"
         )
 );
 

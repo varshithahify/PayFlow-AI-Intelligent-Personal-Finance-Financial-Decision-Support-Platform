@@ -45,3 +45,28 @@ frontend/lighthouse-report.html
 
 
 !.env.docker.example
+
+# Production configuration and secrets
+!.env.prod.example
+.env.prod
+.env.docker
+neon-credentials.env
+env (2).txt
+docker-compose.neon.yml
+
+# Generated Maven files
+effective-pom
+
+# Backup files
+*.bak
+*.backup
+*.before-*
+
+# Generated security reports
+payflow-fraud/trivy-report.json
+
+# Empty/generated mapping artifact
+payflow-mappings.json
+
+# Timestamped backup files
+*.backup-*

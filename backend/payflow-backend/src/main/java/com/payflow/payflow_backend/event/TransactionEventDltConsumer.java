@@ -17,9 +17,6 @@ public class TransactionEventDltConsumer {
     private static final String DLT_TOPIC =
             "transaction-events-dlt";
 
-    private static final String DLT_CONSUMER_GROUP =
-            "payflow-dlt-group";
-
     private final FailedEventRecoveryService failedEventRecoveryService;
 
     public TransactionEventDltConsumer(
@@ -31,7 +28,7 @@ public class TransactionEventDltConsumer {
 
     @KafkaListener(
             topics = DLT_TOPIC,
-            groupId = DLT_CONSUMER_GROUP
+            groupId = "${app.kafka.transaction-dlt-consumer-group:payflow-dlt-group}"
     )
     public void consume(TransactionEvent event) {
 

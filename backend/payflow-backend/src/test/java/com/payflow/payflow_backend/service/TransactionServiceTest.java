@@ -8,6 +8,8 @@ import com.payflow.payflow_backend.dto.TransactionResponse;
 import com.payflow.payflow_backend.entity.Transaction;
 import com.payflow.payflow_backend.entity.TransactionStatus;
 import com.payflow.payflow_backend.entity.User;
+import com.payflow.payflow_backend.entity.FraudScore;
+import com.payflow.payflow_backend.repository.FraudScoreRepository;
 import com.payflow.payflow_backend.event.FraudAlertProducer;
 import com.payflow.payflow_backend.event.TransactionEvent;
 import com.payflow.payflow_backend.event.TransactionEventProducer;
@@ -75,6 +77,9 @@ class TransactionServiceTest {
     @Mock
     private User user;
 
+    @Mock
+    private FraudScoreRepository fraudScoreRepository;
+
     private TransactionService transactionService;
 
     private static final Long USER_ID = 1L;
@@ -103,15 +108,16 @@ class TransactionServiceTest {
                 .thenReturn(fraudResponse);
 
         transactionService = new TransactionService(
-                transactionRepository,
-                userRepository,
-                gatewayRouter,
-                gatewayHealthService,
-                transactionEventProducer,
-                transactionCacheService,
-                fraudServiceClient,
-                fraudAlertProducer
-        );
+        transactionRepository,
+        userRepository,
+        gatewayRouter,
+        gatewayHealthService,
+        transactionEventProducer,
+        transactionCacheService,
+        fraudServiceClient,
+        fraudAlertProducer,
+        fraudScoreRepository
+);
     }
 
     @Test
@@ -585,7 +591,9 @@ class TransactionServiceTest {
         fraudResponse.setAction("BLOCK");
         fraudResponse.setMlScore(90.0);
         fraudResponse.setVelocityScore(40.0);
-
+        fraudResponse.setTriggeredRules(
+        List.of("HIGH_AMOUNT", "VELOCITY_CHECK")
+);
         when(fraudServiceClient.score(any(FraudScoreRequest.class)))
                 .thenReturn(fraudResponse);
 
@@ -597,6 +605,24 @@ class TransactionServiceTest {
                         TRANSACTION_ID,
                         EMAIL
                 );
+
+        ArgumentCaptor<FraudScore> fraudScoreCaptor =
+        ArgumentCaptor.forClass(FraudScore.class);
+
+verify(fraudScoreRepository, times(1))
+        .save(fraudScoreCaptor.capture());
+
+FraudScore savedFraudScore = fraudScoreCaptor.getValue();
+
+assertEquals(TRANSACTION_ID, savedFraudScore.getTransactionId());
+assertEquals(85.0, savedFraudScore.getScore(), 0.001);
+assertEquals(90.0, savedFraudScore.getMlScore(), 0.001);
+assertEquals(40.0, savedFraudScore.getVelocityScore(), 0.001);
+
+assertEquals(
+        "HIGH_AMOUNT, VELOCITY_CHECK",
+        savedFraudScore.getTriggeredRules()
+);
 
         assertNotNull(response);
 

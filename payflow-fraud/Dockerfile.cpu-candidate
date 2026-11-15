@@ -24,5 +24,7 @@ USER app
 EXPOSE 8083
 
 # Verify application, Redis and model health
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('redis')=='UP' and d.get('model')=='loaded'"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD python -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8083/health',timeout=3)); assert d.get('status')=='UP' and d.get('model')=='loaded'"
+
+# Start FastAPI application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8083"]
