@@ -12,6 +12,7 @@ import { configureStore } from '@reduxjs/toolkit'
 const {
   mockLogin,
   mockRegister,
+  mockCreate,
   mockGetAll,
   mockGetPage,
   mockGetById,
@@ -23,6 +24,7 @@ const {
 } = vi.hoisted(() => ({
   mockLogin: vi.fn(),
   mockRegister: vi.fn(),
+  mockCreate: vi.fn(),
   mockGetAll: vi.fn(),
   mockGetPage: vi.fn(),
   mockGetById: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock('./services/api', () => ({
     register: mockRegister,
   },
   transactionApi: {
+    create: mockCreate,
     getAll: mockGetAll,
     getPage: mockGetPage,
     getById: mockGetById,
@@ -129,6 +132,13 @@ mockGetPage.mockImplementation(async (params) => ({
 
 
     mockGetById.mockResolvedValue(null)
+    mockCreate.mockResolvedValue({
+      id: 106,
+      amount: 1500,
+      currency: 'INR',
+      paymentMethod: 'UPI',
+      status: 'CREATED',
+    })
 
     mockGetOverview.mockResolvedValue({})
     mockGetPaymentTrends.mockResolvedValue([])
@@ -627,5 +637,125 @@ it('should update transaction page size', async () => {
       'test-jwt-token',
     )
   })
+})
+// CREATE TRANSACTION UI TESTS
+
+it('should open the Create Transaction modal', async () => {
+  const user = userEvent.setup()
+
+  renderAuthenticatedApp()
+
+  await user.click(getNavigationButton('Transactions'))
+
+  await user.click(
+    await screen.findByRole('button', {
+      name: /create transaction/i,
+    }),
+  )
+
+  expect(
+    screen.getByRole('heading', {
+      name: /create transaction/i,
+    }),
+  ).toBeInTheDocument()
+})
+
+it('should create a transaction successfully', async () => {
+  const user = userEvent.setup()
+
+  renderAuthenticatedApp()
+
+  await user.click(getNavigationButton('Transactions'))
+
+  await user.click(
+    await screen.findByRole('button', {
+      name: /create transaction/i,
+    }),
+  )
+
+  await user.type(
+    screen.getByLabelText(/amount/i),
+    '1500',
+  )
+
+  await user.selectOptions(
+    screen.getByLabelText(/currency/i),
+    'INR',
+  )
+
+  const transactionDialog = screen.getByRole('dialog')
+
+  await user.selectOptions(
+    within(transactionDialog).getByLabelText(/payment method/i),
+    'UPI',
+  )
+
+  const createButtons = screen.getAllByRole('button', {
+    name: /create transaction/i,
+  })
+
+  await user.click(createButtons[createButtons.length - 1])
+
+  await waitFor(() => {
+    expect(mockCreate).toHaveBeenCalledWith(
+      {
+        amount: 1500,
+        currency: 'INR',
+        paymentMethod: 'UPI',
+      },
+      expect.any(String),
+      'test-jwt-token',
+    )
+  })
+
+  // A successful creation closes the modal.
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+it('should display an error when transaction creation fails', async () => {
+  const user = userEvent.setup()
+
+  mockCreate.mockRejectedValue(
+    new Error('Transaction creation failed'),
+  )
+
+  renderAuthenticatedApp()
+
+  await user.click(getNavigationButton('Transactions'))
+
+  await user.click(
+    await screen.findByRole('button', {
+      name: /create transaction/i,
+    }),
+  )
+
+  await user.type(
+    screen.getByLabelText(/amount/i),
+    '1500',
+  )
+
+  await user.selectOptions(
+    screen.getByLabelText(/currency/i),
+    'INR',
+  )
+
+  const transactionDialog = screen.getByRole('dialog')
+
+  await user.selectOptions(
+    within(transactionDialog).getByLabelText(/payment method/i),
+    'UPI',
+  )
+
+  const createButtons = screen.getAllByRole('button', {
+    name: /create transaction/i,
+  })
+
+  await user.click(createButtons[createButtons.length - 1])
+
+  expect(
+    await screen.findByText(/transaction creation failed/i),
+  ).toBeInTheDocument()
 })
 })

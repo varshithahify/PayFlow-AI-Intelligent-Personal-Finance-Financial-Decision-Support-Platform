@@ -247,6 +247,84 @@ describe('api service', () => {
     expect(url.searchParams.get('direction')).toBe('desc')
   })
 
+    // CREATE TRANSACTION API TESTS
+
+  it('should send a POST request with transaction data and idempotency key', async () => {
+    const transaction = {
+      amount: 1500,
+      currency: 'INR',
+      paymentMethod: 'UPI',
+    }
+
+    const responseData = {
+      id: 105,
+      ...transaction,
+      status: 'CREATED',
+    }
+
+    fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: {
+        get: () => 'application/json',
+      },
+      json: async () => responseData,
+    })
+
+    const result = await transactionApi.create(
+      transaction,
+      'test-idempotency-key',
+      'test-jwt-token',
+    )
+
+    expect(fetch).toHaveBeenCalledOnce()
+
+    const [requestedUrl, requestOptions] = fetch.mock.calls[0]
+
+    expect(requestedUrl).toBe(
+      'http://127.0.0.1:8081/api/transactions',
+    )
+
+    expect(requestOptions.method).toBe('POST')
+
+    expect(requestOptions.headers).toMatchObject({
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'test-idempotency-key',
+      Authorization: 'Bearer test-jwt-token',
+    })
+
+    expect(requestOptions.body).toBe(
+      JSON.stringify(transaction),
+    )
+
+    expect(result).toEqual(responseData)
+  })
+
+  it('should handle transaction creation API failure', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => 'Invalid transaction amount',
+    })
+
+    await expect(
+      transactionApi.create(
+        {
+          amount: -100,
+          currency: 'INR',
+          paymentMethod: 'UPI',
+        },
+        'invalid-transaction-key',
+        'test-jwt-token',
+      ),
+    ).rejects.toMatchObject({
+      message: 'Invalid transaction amount',
+      status: 400,
+    })
+
+    expect(fetch).toHaveBeenCalledOnce()
+  })
   it('should call reconciliation and analytics endpoints', async () => {
     fetch.mockResolvedValue({
       ok: true,

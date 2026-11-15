@@ -11,6 +11,7 @@ import {
   fetchTransactions,
   fetchTransactionsPage,
   fetchTransactionById,
+  createTransaction,
   clearSelectedTransaction,
   setPageSize,
   setPage,
@@ -333,6 +334,13 @@ function AuthScreen({ mode, onModeChange, onAuthenticated }) {
   )
 }
 
+function generateIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID()
+  }
+  return `payflow-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 function Dashboard({ email, token, onLogout }) {
   const [activePage, setActivePage] = useState('Overview')
 
@@ -351,6 +359,8 @@ function Dashboard({ email, token, onLogout }) {
     paginationLoading,
     error: transactionError,
     selectedTransaction,
+    creating,
+    creationError,
   } = useSelector((state) => state.transactions)
 
   const {
@@ -363,6 +373,15 @@ function Dashboard({ email, token, onLogout }) {
   } = useSelector((state) => state.analytics)
 
   const [refreshVersion, setRefreshVersion] = useState(0)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newTransaction, setNewTransaction] = useState({
+    amount: '',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+  })
+  const [creationKey, setCreationKey] = useState('')
+  const [creationMessage, setCreationMessage] = useState('')
+  const [formError, setFormError] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -575,6 +594,64 @@ function Dashboard({ email, token, onLogout }) {
     return record.status === reconciliationFilter
   })
 
+  function openCreateTransaction() {
+    setNewTransaction({ amount: '', currency: 'INR', paymentMethod: 'UPI' })
+    setCreationKey(generateIdempotencyKey())
+    setFormError('')
+    setCreationMessage('')
+    setShowCreateModal(true)
+  }
+
+  function updateTransactionField(field, value) {
+    setNewTransaction((current) => ({ ...current, [field]: value }))
+    setCreationKey(generateIdempotencyKey())
+    setFormError('')
+  }
+
+  async function handleCreateTransaction(event) {
+    event.preventDefault()
+    setFormError('')
+    setCreationMessage('')
+
+    const amount = Number(newTransaction.amount)
+    if (!Number.isFinite(amount) || amount < 0.01) {
+      setFormError('Enter an amount greater than or equal to 0.01.')
+      return
+    }
+    if (!creationKey) {
+      setFormError('Unable to generate a request key. Please close and reopen the form.')
+      return
+    }
+
+    try {
+      const created = await dispatch(
+        createTransaction({
+          transaction: {
+            amount,
+            currency: newTransaction.currency,
+            paymentMethod: newTransaction.paymentMethod,
+          },
+          idempotencyKey: creationKey,
+          token,
+        }),
+      ).unwrap()
+
+      setShowCreateModal(false)
+      setNewTransaction({ amount: '', currency: 'INR', paymentMethod: 'UPI' })
+      setCreationKey('')
+      setCreationMessage(
+        `Transaction ${created?.id != null ? `TXN-${created.id}` : ''} created successfully. Its initial status is CREATED.`,
+      )
+      setRefreshVersion((version) => version + 1)
+    } catch (error) {
+      setFormError(
+        typeof error === 'string'
+          ? error
+          : error?.message || 'Unable to create the transaction. Please try again.',
+      )
+    }
+  }
+
   async function openTransaction(transaction) {
     dispatch(clearSelectedTransaction())
     setDetailError('')
@@ -744,6 +821,18 @@ function Dashboard({ email, token, onLogout }) {
                 <span>⇄</span> View transactions
               </button>
             </section>
+
+            {creationMessage && (
+              <div className="auth-alert auth-alert-success" role="status">
+                {creationMessage}
+              </div>
+            )}
+
+            {creationError && (
+              <div className="auth-alert auth-alert-error" role="alert">
+                {creationError}
+              </div>
+            )}
 
             {transactionError && (
               <div
@@ -1005,17 +1094,21 @@ function Dashboard({ email, token, onLogout }) {
                 </p>
               </div>
 
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() =>
-                  setRefreshVersion((version) => version + 1)
-                }
-                disabled={loadingTransactions}
-              >
-                <span>↻</span>
-                {loadingTransactions ? 'Refreshing...' : 'Refresh'}
-              </button>
+              <div className="transaction-actions">
+                <button className="primary-button" type="button" onClick={openCreateTransaction}>
+                  <span aria-hidden="true">＋</span>
+                  Create transaction
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setRefreshVersion((version) => version + 1)}
+                  disabled={loadingTransactions}
+                >
+                  <span aria-hidden="true">↻</span>
+                  {loadingTransactions ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
             </section>
 
             {transactionError && (
@@ -1470,6 +1563,111 @@ function Dashboard({ email, token, onLogout }) {
           </span>
         </footer>
       </main>
+
+      {showCreateModal && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !creating) {
+              setShowCreateModal(false)
+            }
+          }}
+        >
+          <section
+            className="transaction-modal panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-transaction-title"
+          >
+            <div className="panel-header modal-header">
+              <div>
+                <p className="eyebrow">PAYMENT OPERATIONS</p>
+                <h3 id="create-transaction-title">Create transaction</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setShowCreateModal(false)}
+                disabled={creating}
+                aria-label="Close create transaction dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <form className="create-transaction-form" onSubmit={handleCreateTransaction}>
+              <label>
+                <span>Amount</span>
+                <input
+                  type="number"
+                  name="amount"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Enter amount"
+                  value={newTransaction.amount}
+                  onChange={(event) => updateTransactionField('amount', event.target.value)}
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Currency</span>
+                <select
+                  name="currency"
+                  value={newTransaction.currency}
+                  onChange={(event) => updateTransactionField('currency', event.target.value)}
+                  required
+                >
+                  <option value="INR">INR — Indian Rupee</option>
+                  <option value="USD">USD — US Dollar</option>
+                  <option value="EUR">EUR — Euro</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Payment method</span>
+                <select
+                  name="paymentMethod"
+                  value={newTransaction.paymentMethod}
+                  onChange={(event) => updateTransactionField('paymentMethod', event.target.value)}
+                  required
+                >
+                  <option value="UPI">UPI</option>
+                  <option value="CARD">Card</option>
+                  <option value="NET_BANKING">Net banking</option>
+                  <option value="WALLET">Wallet</option>
+                </select>
+              </label>
+
+              {formError && (
+                <div className="auth-alert auth-alert-error" role="alert">
+                  {formError}
+                </div>
+              )}
+
+              <p className="demo-note modal-note">
+                This creates a transaction record with status CREATED. It does not charge a payment method or move money.
+              </p>
+
+              <div className="transaction-form-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  disabled={creating}
+                >
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit" disabled={creating}>
+                  {creating ? 'Creating...' : 'Create transaction'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {selectedTransaction && (
         <div

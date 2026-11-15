@@ -91,6 +91,16 @@ export const authApi = {
 
 // Transaction APIs
 export const transactionApi = {
+    // Create a transaction record.
+  create: (transaction, idempotencyKey, token) =>
+    apiRequest('/api/transactions', {
+      method: 'POST',
+      token,
+      body: transaction,
+      headers: {
+        'Idempotency-Key': idempotencyKey,
+      },
+    }),
   // Fetch all transactions (existing endpoint).
   getAll: (token) =>
     apiRequest('/api/transactions', { token }),

@@ -74,12 +74,35 @@ export const fetchTransactionById = createAsyncThunk(
   },
 )
 
+// Create a transaction
+export const createTransaction = createAsyncThunk(
+  'transactions/create',
+  async (
+    { transaction, idempotencyKey, token },
+    { rejectWithValue },
+  ) => {
+    try {
+      return await transactionApi.create(
+        transaction,
+        idempotencyKey,
+        token,
+      )
+    } catch (error) {
+      return rejectWithValue(
+        error.message || 'Unable to create transaction.',
+      )
+    }
+  },
+)
+
 const initialState = {
   // Complete transaction list used by Dashboard and Reconciliation
   items: [],
 
   // Transactions belonging to the current filtered page
   pageItems: [],
+    creating: false,
+  creationError: null,
 
   // Pagination metadata
   page: 0,
@@ -129,6 +152,22 @@ const transactionSlice = createSlice({
 
   extraReducers: (builder) => {
     builder
+        .addCase(createTransaction.pending, (state) => {
+        state.creating = true
+        state.creationError = null
+      })
+
+      .addCase(createTransaction.fulfilled, (state) => {
+        state.creating = false
+        state.creationError = null
+      })
+
+      .addCase(createTransaction.rejected, (state, action) => {
+        state.creating = false
+        state.creationError =
+          action.payload || 'Unable to create transaction.'
+      })
+
       .addCase(fetchTransactions.pending, (state) => {
         state.loading = true
         state.error = null

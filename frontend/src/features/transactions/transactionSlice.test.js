@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { configureStore } from '@reduxjs/toolkit'
 
-const { mockGetAll, mockGetPage, mockGetById } = vi.hoisted(() => ({
+const {
+  mockGetAll,
+  mockGetPage,
+  mockGetById,
+  mockCreate,
+} = vi.hoisted(() => ({
   mockGetAll: vi.fn(),
   mockGetPage: vi.fn(),
   mockGetById: vi.fn(),
+  mockCreate: vi.fn(),
 }))
 
 vi.mock('../../services/api', () => ({
@@ -12,6 +18,7 @@ vi.mock('../../services/api', () => ({
     getAll: mockGetAll,
     getPage: mockGetPage,
     getById: mockGetById,
+    create: mockCreate,
   },
 }))
 
@@ -23,6 +30,7 @@ import transactionReducer, {
   fetchTransactions,
   fetchTransactionsPage,
   fetchTransactionById,
+  createTransaction,
 } from './transactionSlice'
 
 const createTestStore = () =>
@@ -47,6 +55,8 @@ describe('transactionSlice', () => {
     expect(state.size).toBe(10)
     expect(state.loading).toBe(false)
     expect(state.paginationLoading).toBe(false)
+    expect(state.creating).toBe(false)
+    expect(state.creationError).toBeNull()
     expect(state.error).toBeNull()
     expect(state.selectedTransaction).toBeNull()
   })
@@ -76,7 +86,6 @@ describe('transactionSlice', () => {
 
     store.dispatch(setPage(3))
     store.dispatch(setPageSize(25))
-
     store.dispatch(resetPagination())
 
     const state = store.getState().transactions
@@ -208,7 +217,9 @@ describe('transactionSlice', () => {
 
     const store = createTestStore()
 
-    await store.dispatch(fetchTransactionsPage({ token: 'test-token' }))
+    await store.dispatch(
+      fetchTransactionsPage({ token: 'test-token' }),
+    )
 
     const state = store.getState().transactions
 
@@ -234,10 +245,148 @@ describe('transactionSlice', () => {
       }),
     )
 
-    expect(mockGetById).toHaveBeenCalledWith(101, 'test-token')
+    expect(mockGetById).toHaveBeenCalledWith(
+      101,
+      'test-token',
+    )
 
     expect(
       store.getState().transactions.selectedTransaction,
     ).toEqual(transaction)
+  })
+
+  // CREATE TRANSACTION TESTS
+
+  it('should create a transaction successfully', async () => {
+    const transaction = {
+      amount: 1500,
+      currency: 'INR',
+      paymentMethod: 'UPI',
+    }
+
+    const createdTransaction = {
+      id: 102,
+      ...transaction,
+      status: 'CREATED',
+    }
+
+    mockCreate.mockResolvedValue(createdTransaction)
+
+    const store = createTestStore()
+
+    await store.dispatch(
+      createTransaction({
+        transaction,
+        idempotencyKey: 'test-idempotency-key',
+        token: 'test-token',
+      }),
+    )
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      transaction,
+      'test-idempotency-key',
+      'test-token',
+    )
+
+    const state = store.getState().transactions
+
+    expect(state.creating).toBe(false)
+    expect(state.creationError).toBeNull()
+  })
+
+  it('should set creating state while transaction is being created', async () => {
+    let resolveRequest
+
+    mockCreate.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
+
+    const store = createTestStore()
+
+    const request = store.dispatch(
+      createTransaction({
+        transaction: {
+          amount: 1500,
+          currency: 'INR',
+          paymentMethod: 'UPI',
+        },
+        idempotencyKey: 'loading-test-key',
+        token: 'test-token',
+      }),
+    )
+
+    expect(store.getState().transactions.creating).toBe(true)
+    expect(store.getState().transactions.creationError).toBeNull()
+
+    resolveRequest({
+      id: 103,
+      amount: 1500,
+      status: 'CREATED',
+    })
+
+    await request
+
+    expect(store.getState().transactions.creating).toBe(false)
+  })
+
+  it('should handle transaction creation failure', async () => {
+    mockCreate.mockRejectedValue(
+      new Error('Transaction creation failed'),
+    )
+
+    const store = createTestStore()
+
+    await store.dispatch(
+      createTransaction({
+        transaction: {
+          amount: 1500,
+          currency: 'INR',
+          paymentMethod: 'UPI',
+        },
+        idempotencyKey: 'failure-test-key',
+        token: 'test-token',
+      }),
+    )
+
+    const state = store.getState().transactions
+
+    expect(state.creating).toBe(false)
+    expect(state.creationError).toBe(
+      'Transaction creation failed',
+    )
+  })
+
+  it('should preserve the idempotency key when calling the API', async () => {
+    const transaction = {
+      amount: 2500,
+      currency: 'INR',
+      paymentMethod: 'CARD',
+    }
+
+    mockCreate.mockResolvedValue({
+      id: 104,
+      ...transaction,
+      status: 'CREATED',
+    })
+
+    const store = createTestStore()
+
+    await store.dispatch(
+      createTransaction({
+        transaction,
+        idempotencyKey: 'unique-payment-key-123',
+        token: 'test-token',
+      }),
+    )
+
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      transaction,
+      'unique-payment-key-123',
+      'test-token',
+    )
   })
 })

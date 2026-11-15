@@ -1403,3 +1403,52 @@ color: #595d70;
     transition-duration: 0.01ms !important;
   }
 }
+
+.transaction-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.create-transaction-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px 20px;
+}
+
+.create-transaction-form label {
+  display: grid;
+  gap: 8px;
+  color: #555971;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.create-transaction-form input,
+.create-transaction-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e1e2ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #35384f;
+  font: inherit;
+}
+
+.create-transaction-form input:focus,
+.create-transaction-form select:focus {
+  outline: 2px solid #e3dcff;
+  border-color: #8166ed;
+}
+
+.create-transaction-form button {
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .transaction-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
