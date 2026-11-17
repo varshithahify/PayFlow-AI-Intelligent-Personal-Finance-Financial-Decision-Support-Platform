@@ -3,6 +3,13 @@ import { useDispatch, useSelector } from 'react-redux'
 const AnalyticsCharts = lazy(
   () => import('./features/analytics/AnalyticsCharts')
 )
+
+const SettlementJobsPage = lazy(
+  () => import('./features/settlementJobs/SettlementJobsPage')
+)
+const EventMonitoringPage = lazy(
+  () => import('./features/eventMonitoring/EventMonitoringPage')
+)
 import {
   loginSuccess,
   logout as logoutUser,
@@ -711,9 +718,9 @@ function Dashboard({ email, token, onLogout }) {
     Reconciliation:
       'Compare internal transactions with external payment records.',
     'Settlement Jobs':
-      'Settlement job visibility will be connected in a later phase.',
+      'Create, execute, and monitor settlement reconciliation jobs.',
     'Event Monitoring':
-      'Kafka event and dead-letter queue monitoring will be connected in a later phase.',
+      'Monitor processed Kafka events, failed events, and event processing activity.',
   }[activePage]
 
   return (
@@ -1529,7 +1536,31 @@ function Dashboard({ email, token, onLogout }) {
               )}
             </section>
           </>
-        ) : (
+        ) : activePage === 'Settlement Jobs' ? (
+  <Suspense
+    fallback={
+      <section className="panel">
+        <p className="modal-message">
+          Loading Settlement Jobs...
+        </p>
+      </section>
+    }
+  >
+    <SettlementJobsPage token={token} />
+  </Suspense>
+) : activePage === 'Event Monitoring' ? (
+  <Suspense
+    fallback={
+      <section className="panel">
+        <p className="modal-message">
+          Loading Event Monitoring...
+        </p>
+      </section>
+    }
+  >
+    <EventMonitoringPage token={token} />
+  </Suspense>
+) : (
           <section className="page-placeholder panel">
             <div className="placeholder-icon">
               {navigation.find(

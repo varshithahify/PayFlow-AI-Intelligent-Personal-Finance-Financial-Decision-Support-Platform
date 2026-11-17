@@ -91,7 +91,7 @@ export const authApi = {
 
 // Transaction APIs
 export const transactionApi = {
-    // Create a transaction record.
+  // Create a transaction record.
   create: (transaction, idempotencyKey, token) =>
     apiRequest('/api/transactions', {
       method: 'POST',
@@ -101,7 +101,8 @@ export const transactionApi = {
         'Idempotency-Key': idempotencyKey,
       },
     }),
-  // Fetch all transactions (existing endpoint).
+
+  // Fetch all transactions.
   getAll: (token) =>
     apiRequest('/api/transactions', { token }),
 
@@ -186,4 +187,145 @@ export const analyticsApi = {
 
   getGatewayPerformance: () =>
     apiRequest('/api/analytics/gateway-performance'),
+}
+
+// Settlement Jobs APIs
+export const settlementJobApi = {
+  // Create a settlement job.
+  create: (transactionIds, token) =>
+    apiRequest('/api/settlement-jobs', {
+      method: 'POST',
+      token,
+      body: { transactionIds },
+    }),
+
+  // Fetch paginated settlement jobs.
+  getPage: ({ page = 0, size = 20, status = '' } = {}, token) => {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+
+    if (status) {
+      params.set('status', status)
+    }
+
+    return apiRequest(
+      `/api/settlement-jobs?${params.toString()}`,
+      { token },
+    )
+  },
+
+  // Fetch individual settlement job.
+  getById: (jobId, token) =>
+    apiRequest(
+      `/api/settlement-jobs/${encodeURIComponent(jobId)}`,
+      { token },
+    ),
+
+  // Execute a settlement job.
+  execute: (jobId, token) =>
+    apiRequest(
+      `/api/settlement-jobs/${encodeURIComponent(jobId)}/execute`,
+      {
+        method: 'POST',
+        token,
+      },
+    ),
+
+  // Fetch execution history.
+  getHistory: (jobId, token) =>
+    apiRequest(
+      `/api/settlement-jobs/${encodeURIComponent(jobId)}/history`,
+      { token },
+    ),
+}
+
+// Event Monitoring APIs
+export const eventMonitoringApi = {
+  // Fetch event overview.
+  getOverview: (token) =>
+    apiRequest('/api/events/overview', { token }),
+
+  // Fetch paginated processed events with filters.
+  getProcessed: (
+    {
+      page = 0,
+      size = 20,
+      eventType = '',
+      fromDate = '',
+      toDate = '',
+    } = {},
+    token,
+  ) => {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+
+   if (eventType.trim()) {
+  params.set('eventType', eventType.trim().toUpperCase())
+}
+
+    if (fromDate) {
+      params.set('fromDate', fromDate)
+    }
+
+    if (toDate) {
+      params.set('toDate', toDate)
+    }
+
+    return apiRequest(
+      `/api/events/processed?${params.toString()}`,
+      { token },
+    )
+  },
+
+  // Fetch paginated failed events with filters.
+  getFailed: (
+    {
+      page = 0,
+      size = 20,
+      eventType = '',
+      fromDate = '',
+      toDate = '',
+    } = {},
+    token,
+  ) => {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+
+    if (eventType.trim()) {
+      params.set('eventType', eventType.trim().toUpperCase())
+    }
+
+    if (fromDate) {
+      params.set('fromDate', fromDate)
+    }
+
+    if (toDate) {
+      params.set('toDate', toDate)
+    }
+
+    return apiRequest(
+      `/api/events/failed?${params.toString()}`,
+      { token },
+    )
+  },
+
+  // Fetch individual processed event details.
+  getProcessedById: (eventId, token) =>
+    apiRequest(
+      `/api/events/processed/${encodeURIComponent(eventId)}`,
+      { token },
+    ),
+
+  // Fetch individual failed event details.
+  getFailedById: (eventId, token) =>
+    apiRequest(
+      `/api/events/failed/${encodeURIComponent(eventId)}`,
+      { token },
+    ),
 }
