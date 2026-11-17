@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -215,6 +216,74 @@ class WebhookConfigServiceTest {
 
         verify(webhookConfigRepository).save(webhookConfig);
     }
+
+    @Test
+void shouldPreserveExistingSecretWhenNewSecretIsNull() {
+
+    when(webhookConfigRepository
+            .findByOrgIdAndId(ORG_ID, WEBHOOK_ID))
+            .thenReturn(Optional.of(webhookConfig));
+
+    when(webhookConfigRepository.save(any(WebhookConfig.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+    WebhookConfig result = webhookConfigService.updateWebhook(
+            ORG_ID,
+            WEBHOOK_ID,
+            "https://updated.example.com/webhook",
+            null,
+            "TRANSACTION_SUCCESS",
+            true
+    );
+
+    assertEquals("secret-key-123", result.getSecretKey());
+
+    verify(webhookConfigRepository).save(webhookConfig);
+}
+
+@Test
+void shouldPreserveExistingSecretWhenNewSecretIsEmpty() {
+
+    when(webhookConfigRepository
+            .findByOrgIdAndId(ORG_ID, WEBHOOK_ID))
+            .thenReturn(Optional.of(webhookConfig));
+
+    when(webhookConfigRepository.save(any(WebhookConfig.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+    WebhookConfig result = webhookConfigService.updateWebhook(
+            ORG_ID,
+            WEBHOOK_ID,
+            "https://updated.example.com/webhook",
+            "",
+            "TRANSACTION_SUCCESS",
+            true
+    );
+
+    assertEquals("secret-key-123", result.getSecretKey());
+}
+
+@Test
+void shouldPreserveExistingSecretWhenNewSecretContainsOnlyWhitespace() {
+
+    when(webhookConfigRepository
+            .findByOrgIdAndId(ORG_ID, WEBHOOK_ID))
+            .thenReturn(Optional.of(webhookConfig));
+
+    when(webhookConfigRepository.save(any(WebhookConfig.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+    WebhookConfig result = webhookConfigService.updateWebhook(
+            ORG_ID,
+            WEBHOOK_ID,
+            "https://updated.example.com/webhook",
+            "   ",
+            "TRANSACTION_SUCCESS",
+            true
+    );
+
+    assertEquals("secret-key-123", result.getSecretKey());
+}
 
     @Test
     void shouldThrowExceptionWhenUpdatingNonExistingWebhook() {

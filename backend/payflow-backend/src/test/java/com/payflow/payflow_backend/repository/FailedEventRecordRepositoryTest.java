@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -45,24 +47,38 @@ class FailedEventRecordRepositoryTest {
     @Autowired
     private FailedEventRecordRepository repository;
 
-    private int insertEvent(UUID eventId, String eventType) {
+    private int insertEvent(
+            UUID eventId,
+            Long orgId,
+            String eventType,
+            LocalDateTime recordedAt
+    ) {
 
         return repository.insertIfNotExists(
                 eventId,
                 null,
-                null,
+                orgId,
                 eventType,
                 "Test failure reason",
-                LocalDateTime.now()
+                recordedAt
         );
     }
+
+    // --------------------------------------------------
+    // EXISTING INSERTION TESTS
+    // --------------------------------------------------
 
     @Test
     void shouldInsertNewFailedEvent() {
 
         UUID eventId = UUID.randomUUID();
 
-        int inserted = insertEvent(eventId, "PAYMENT_FAILED");
+        int inserted = insertEvent(
+                eventId,
+                null,
+                "PAYMENT_FAILED",
+                LocalDateTime.now()
+        );
 
         assertEquals(1, inserted);
         assertTrue(repository.existsByEventId(eventId));
@@ -81,7 +97,12 @@ class FailedEventRecordRepositoryTest {
 
         UUID eventId = UUID.randomUUID();
 
-        insertEvent(eventId, "PAYMENT_FAILED");
+        insertEvent(
+                eventId,
+                null,
+                "PAYMENT_FAILED",
+                LocalDateTime.now()
+        );
 
         assertTrue(repository.existsByEventId(eventId));
     }
@@ -91,9 +112,19 @@ class FailedEventRecordRepositoryTest {
 
         UUID eventId = UUID.randomUUID();
 
-        int firstInsert = insertEvent(eventId, "PAYMENT_FAILED");
+        int firstInsert = insertEvent(
+                eventId,
+                null,
+                "PAYMENT_FAILED",
+                LocalDateTime.now()
+        );
 
-        int secondInsert = insertEvent(eventId, "PAYMENT_FAILED");
+        int secondInsert = insertEvent(
+                eventId,
+                null,
+                "PAYMENT_FAILED",
+                LocalDateTime.now()
+        );
 
         assertEquals(1, firstInsert);
         assertEquals(0, secondInsert);
@@ -108,10 +139,20 @@ class FailedEventRecordRepositoryTest {
         UUID secondEventId = UUID.randomUUID();
 
         int firstInsert =
-                insertEvent(firstEventId, "PAYMENT_FAILED");
+                insertEvent(
+                        firstEventId,
+                        null,
+                        "PAYMENT_FAILED",
+                        LocalDateTime.now()
+                );
 
         int secondInsert =
-                insertEvent(secondEventId, "REFUND_FAILED");
+                insertEvent(
+                        secondEventId,
+                        null,
+                        "REFUND_FAILED",
+                        LocalDateTime.now()
+                );
 
         assertEquals(1, firstInsert);
         assertEquals(1, secondInsert);
@@ -127,7 +168,12 @@ class FailedEventRecordRepositoryTest {
 
         UUID eventId = UUID.randomUUID();
 
-        insertEvent(eventId, "PAYMENT_FAILED");
+        insertEvent(
+                eventId,
+                null,
+                "PAYMENT_FAILED",
+                LocalDateTime.now()
+        );
 
         List<FailedEventRecord> records = repository.findAll();
 
@@ -139,5 +185,165 @@ class FailedEventRecordRepositoryTest {
         assertEquals("PAYMENT_FAILED", record.getEventType());
         assertEquals("Test failure reason", record.getFailureReason());
         assertNotNull(record.getRecordedAt());
+    }
+
+    // --------------------------------------------------
+    // EVENT TYPE FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldFilterFailedEventsByEventType() {
+
+        LocalDateTime now = LocalDateTime.now();
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "PAYMENT_FAILED",
+                now
+        );
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "REFUND_FAILED",
+                now
+        );
+
+        Page<FailedEventRecord> result =
+                repository.findFilteredEvents(
+                        1L,
+                        "PAYMENT_FAILED",
+                        null,
+                        null,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+
+        assertEquals(
+                "PAYMENT_FAILED",
+                result.getContent().get(0).getEventType()
+        );
+    }
+
+    // --------------------------------------------------
+    // DATE RANGE FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldFilterFailedEventsByDateRange() {
+
+        LocalDateTime fromDate =
+                LocalDateTime.of(2026, 11, 10, 0, 0);
+
+        LocalDateTime toDate =
+                LocalDateTime.of(2026, 11, 15, 23, 59);
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "PAYMENT_FAILED",
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "PAYMENT_FAILED",
+                LocalDateTime.of(2026, 11, 18, 10, 0)
+        );
+
+        Page<FailedEventRecord> result =
+                repository.findFilteredEvents(
+                        1L,
+                        null,
+                        fromDate,
+                        toDate,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+    }
+
+    // --------------------------------------------------
+    // COMBINED FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldCombineFailedEventFilters() {
+
+        LocalDateTime fromDate =
+                LocalDateTime.of(2026, 11, 10, 0, 0);
+
+        LocalDateTime toDate =
+                LocalDateTime.of(2026, 11, 15, 23, 59);
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "PAYMENT_FAILED",
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "REFUND_FAILED",
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        insertEvent(
+                UUID.randomUUID(),
+                1L,
+                "PAYMENT_FAILED",
+                LocalDateTime.of(2026, 11, 18, 10, 0)
+        );
+
+        Page<FailedEventRecord> result =
+                repository.findFilteredEvents(
+                        1L,
+                        "PAYMENT_FAILED",
+                        fromDate,
+                        toDate,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+
+        assertEquals(
+                "PAYMENT_FAILED",
+                result.getContent().get(0).getEventType()
+        );
+    }
+
+    // --------------------------------------------------
+    // PAGINATION
+    // --------------------------------------------------
+
+    @Test
+    void shouldReturnFailedEventsUsingPagination() {
+
+        for (int i = 0; i < 5; i++) {
+            insertEvent(
+                    UUID.randomUUID(),
+                    1L,
+                    "PAYMENT_FAILED",
+                    LocalDateTime.now()
+            );
+        }
+
+        Page<FailedEventRecord> result =
+                repository.findFilteredEvents(
+                        1L,
+                        null,
+                        null,
+                        null,
+                        PageRequest.of(0, 2)
+                );
+
+        assertEquals(5, result.getTotalElements());
+        assertEquals(2, result.getContent().size());
+        assertEquals(3, result.getTotalPages());
     }
 }

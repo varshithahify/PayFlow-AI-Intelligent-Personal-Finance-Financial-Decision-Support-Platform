@@ -2,7 +2,7 @@ package com.payflow.payflow_backend.event;
 
 import com.payflow.payflow_backend.entity.WebhookConfig;
 import com.payflow.payflow_backend.service.WebhookConfigService;
-import com.payflow.payflow_backend.service.WebhookDeliveryService;
+import com.payflow.payflow_backend.webhook.WebhookDeliveryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;

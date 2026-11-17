@@ -3,6 +3,7 @@ package com.payflow.payflow_backend.service;
 import com.payflow.payflow_backend.entity.WebhookConfig;
 import com.payflow.payflow_backend.exception.ResourceNotFoundException;
 import com.payflow.payflow_backend.repository.WebhookConfigRepository;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ public class WebhookConfigService {
 
     public WebhookConfigService(
             WebhookConfigRepository webhookConfigRepository) {
+
         this.webhookConfigRepository = webhookConfigRepository;
     }
 
@@ -30,25 +32,30 @@ public class WebhookConfigService {
                 endpointUrl,
                 secretKey,
                 events,
-                true);
+                true
+        );
 
         return webhookConfigRepository.save(webhookConfig);
     }
 
     public List<WebhookConfig> getWebhooks(Long orgId) {
+
         return webhookConfigRepository
                 .findByOrgIdOrderByCreatedAtDesc(orgId);
     }
 
     public WebhookConfig getWebhook(Long orgId, Long id) {
+
         return webhookConfigRepository
                 .findByOrgIdAndId(orgId, id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
-                                "Webhook configuration not found"));
+                                "Webhook configuration not found"
+                        ));
     }
 
     public List<WebhookConfig> getActiveWebhooks(Long orgId) {
+
         return webhookConfigRepository
                 .findByOrgIdAndActiveTrueOrderByCreatedAtDesc(orgId);
     }
@@ -65,7 +72,12 @@ public class WebhookConfigService {
         WebhookConfig webhookConfig = getWebhook(orgId, id);
 
         webhookConfig.setEndpointUrl(endpointUrl);
-        webhookConfig.setSecretKey(secretKey);
+
+        // Preserve the existing secret unless a new nonblank secret is supplied.
+        if (secretKey != null && !secretKey.isBlank()) {
+            webhookConfig.setSecretKey(secretKey);
+        }
+
         webhookConfig.setEvents(events);
         webhookConfig.setActive(active);
 
@@ -74,7 +86,9 @@ public class WebhookConfigService {
 
     @Transactional
     public void deleteWebhook(Long orgId, Long id) {
+
         WebhookConfig webhookConfig = getWebhook(orgId, id);
+
         webhookConfigRepository.delete(webhookConfig);
     }
 }

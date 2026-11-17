@@ -14,7 +14,6 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
-@Service
 public class WebhookDeliveryService {
 
     private static final String HMAC_SHA256 = "HmacSHA256";

@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -51,6 +53,10 @@ class ProcessedEventRepositoryTest {
                 LocalDateTime.now()
         );
     }
+
+    // --------------------------------------------------
+    // EXISTING INSERTION TESTS
+    // --------------------------------------------------
 
     @Test
     void shouldInsertNewProcessedEvent() {
@@ -141,5 +147,166 @@ class ProcessedEventRepositoryTest {
         assertEquals("PAYMENT_COMPLETED", record.getEventType());
         assertEquals(1L, record.getOrgId());
         assertNotNull(record.getProcessedAt());
+    }
+
+    // --------------------------------------------------
+    // EVENT TYPE FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldFilterProcessedEventsByEventType() {
+
+        LocalDateTime now = LocalDateTime.now();
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_SUCCESS",
+                1L,
+                now
+        );
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_FAILED",
+                1L,
+                now
+        );
+
+        Page<ProcessedEvent> result =
+                repository.findFilteredEvents(
+                        1L,
+                        "TRANSACTION_SUCCESS",
+                        null,
+                        null,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+
+        assertEquals(
+                "TRANSACTION_SUCCESS",
+                result.getContent().get(0).getEventType()
+        );
+    }
+
+    // --------------------------------------------------
+    // DATE RANGE FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldFilterProcessedEventsByDateRange() {
+
+        LocalDateTime fromDate =
+                LocalDateTime.of(2026, 11, 10, 0, 0);
+
+        LocalDateTime toDate =
+                LocalDateTime.of(2026, 11, 15, 23, 59);
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_SUCCESS",
+                1L,
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_SUCCESS",
+                1L,
+                LocalDateTime.of(2026, 11, 18, 10, 0)
+        );
+
+        Page<ProcessedEvent> result =
+                repository.findFilteredEvents(
+                        1L,
+                        null,
+                        fromDate,
+                        toDate,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+    }
+
+    // --------------------------------------------------
+    // COMBINED FILTERING
+    // --------------------------------------------------
+
+    @Test
+    void shouldCombineProcessedEventFilters() {
+
+        LocalDateTime fromDate =
+                LocalDateTime.of(2026, 11, 10, 0, 0);
+
+        LocalDateTime toDate =
+                LocalDateTime.of(2026, 11, 15, 23, 59);
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_SUCCESS",
+                1L,
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_FAILED",
+                1L,
+                LocalDateTime.of(2026, 11, 12, 10, 0)
+        );
+
+        repository.insertIfNotExists(
+                UUID.randomUUID(),
+                "TRANSACTION_SUCCESS",
+                1L,
+                LocalDateTime.of(2026, 11, 18, 10, 0)
+        );
+
+        Page<ProcessedEvent> result =
+                repository.findFilteredEvents(
+                        1L,
+                        "TRANSACTION_SUCCESS",
+                        fromDate,
+                        toDate,
+                        PageRequest.of(0, 20)
+                );
+
+        assertEquals(1, result.getTotalElements());
+
+        assertEquals(
+                "TRANSACTION_SUCCESS",
+                result.getContent().get(0).getEventType()
+        );
+    }
+
+    // --------------------------------------------------
+    // PAGINATION
+    // --------------------------------------------------
+
+    @Test
+    void shouldReturnProcessedEventsUsingPagination() {
+
+        LocalDateTime now = LocalDateTime.now();
+
+        for (int i = 0; i < 5; i++) {
+            insertEvent(
+                    UUID.randomUUID(),
+                    "TRANSACTION_SUCCESS",
+                    1L
+            );
+        }
+
+        Page<ProcessedEvent> result =
+                repository.findFilteredEvents(
+                        1L,
+                        null,
+                        null,
+                        null,
+                        PageRequest.of(0, 2)
+                );
+
+        assertEquals(5, result.getTotalElements());
+        assertEquals(2, result.getContent().size());
+        assertEquals(3, result.getTotalPages());
     }
 }

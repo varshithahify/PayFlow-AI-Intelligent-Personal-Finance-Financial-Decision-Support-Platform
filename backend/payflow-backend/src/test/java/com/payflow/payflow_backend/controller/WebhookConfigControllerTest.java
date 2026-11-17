@@ -1,6 +1,5 @@
 package com.payflow.payflow_backend.controller;
 
-import com.payflow.payflow_backend.dto.WebhookConfigRequest;
 import com.payflow.payflow_backend.entity.User;
 import com.payflow.payflow_backend.entity.WebhookConfig;
 import com.payflow.payflow_backend.repository.UserRepository;
@@ -40,14 +39,12 @@ class WebhookConfigControllerTest {
     @MockitoBean
     private JwtAuthenticationFilter jwtAuthenticationFilter;
 
-
     private UsernamePasswordAuthenticationToken authentication() {
         return new UsernamePasswordAuthenticationToken(
                 "merchant@example.com",
                 "password"
         );
     }
-
 
     private User createUser() {
         return new User(
@@ -57,7 +54,6 @@ class WebhookConfigControllerTest {
                 10L
         );
     }
-
 
     private WebhookConfig createWebhook(Long id) {
 
@@ -74,7 +70,6 @@ class WebhookConfigControllerTest {
         return webhook;
     }
 
-
     private String validRequest() {
         return """
                 {
@@ -84,7 +79,6 @@ class WebhookConfigControllerTest {
                 }
                 """;
     }
-
 
     // --------------------------------------------------
     // CREATE WEBHOOK
@@ -116,7 +110,8 @@ class WebhookConfigControllerTest {
         .andExpect(jsonPath("$.orgId").value(10))
         .andExpect(jsonPath("$.endpointUrl")
                 .value("https://example.com/webhook"))
-        .andExpect(jsonPath("$.active").value(true));
+        .andExpect(jsonPath("$.active").value(true))
+        .andExpect(jsonPath("$.secretKey").doesNotExist());
 
         verify(userRepository)
                 .findByEmail("merchant@example.com");
@@ -128,7 +123,6 @@ class WebhookConfigControllerTest {
                 "payment.success,payment.failed"
         );
     }
-
 
     @Test
     void shouldRejectWebhookCreationWhenEndpointUrlIsMissing()
@@ -152,7 +146,6 @@ class WebhookConfigControllerTest {
 
         verifyNoInteractions(webhookConfigService);
     }
-
 
     // --------------------------------------------------
     // GET ALL WEBHOOKS
@@ -178,11 +171,12 @@ class WebhookConfigControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
         .andExpect(jsonPath("$[0].orgId").value(10))
-        .andExpect(jsonPath("$[1].orgId").value(10));
+        .andExpect(jsonPath("$[1].orgId").value(10))
+        .andExpect(jsonPath("$[0].secretKey").doesNotExist())
+        .andExpect(jsonPath("$[1].secretKey").doesNotExist());
 
         verify(webhookConfigService).getWebhooks(10L);
     }
-
 
     @Test
     void shouldReturnEmptyListWhenNoWebhooksExist()
@@ -204,7 +198,6 @@ class WebhookConfigControllerTest {
         verify(webhookConfigService).getWebhooks(10L);
     }
 
-
     // --------------------------------------------------
     // GET WEBHOOK BY ID
     // --------------------------------------------------
@@ -224,11 +217,11 @@ class WebhookConfigControllerTest {
         )
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(1))
-        .andExpect(jsonPath("$.orgId").value(10));
+        .andExpect(jsonPath("$.orgId").value(10))
+        .andExpect(jsonPath("$.secretKey").doesNotExist());
 
         verify(webhookConfigService).getWebhook(10L, 1L);
     }
-
 
     // --------------------------------------------------
     // UPDATE WEBHOOK
@@ -261,7 +254,8 @@ class WebhookConfigControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(1))
         .andExpect(jsonPath("$.endpointUrl")
-                .value("https://example.com/updated"));
+                .value("https://example.com/updated"))
+        .andExpect(jsonPath("$.secretKey").doesNotExist());
 
         verify(webhookConfigService).updateWebhook(
                 10L,
@@ -272,7 +266,6 @@ class WebhookConfigControllerTest {
                 true
         );
     }
-
 
     // --------------------------------------------------
     // DELETE WEBHOOK
